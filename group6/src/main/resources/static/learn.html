@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="css/style.css" rel="stylesheet">
+<link href="css/learn.css" rel="stylesheet">
+<title>LearnHub - Learn</title>
+</head>
+<body>
+<main class="flex-grow-1 container-xxl py-3" id="page"><div class="text-center p-5"><div class="spinner-border"></div></div></main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/seed-content.js"></script>
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script>
+/* learn.html?id=<courseId>&k=<section>.<lesson>   (k is optional: resumes at the first unfinished lesson) */
+if (guard()) (async () => {
+  const id = new URLSearchParams(location.search).get('id'), admin = state.user.role === 'ADMIN';
+  let c, curr, done = new Set(), quizzes = {}, enrolled = false, seq = [], k;
+  const tracked = () => enrolled;
+  const lessonKeys = () => seq.filter(x => x.t === 'l').map(x => x.k);
+  const total = () => lessonKeys().length;
+  const sectionDone = si => curr[si].lessons.every((_, j) => done.has((si + 1) + '.' + (j + 1)));
+  const quizOpen = si => admin || sectionDone(si);
+  const pct = () => { const items = seq.length; const d = seq.filter(x => x.t === 'l' ? done.has(x.k) : quizzes[x.quizId]?.passed).length; return items ? Math.round(d / items * 100) : 0; };
+
+  function buildSeq() {
+    seq = [];
+    curr.forEach((s, i) => { s.lessons.forEach((l, j) => seq.push({ t: 'l', k: (i + 1) + '.' + (j + 1), si: i, title: l.title, minutes: l.minutes, type: l.type }));
+      (s.quizzes || []).forEach(q => seq.push({ t: 'q', quizId: q.quizId, si: i, title: q.title, count: q.questionCount })); });
+  }
+  const hrefOf = x => x.t === 'l' ? 'learn.html?id=' + id + '&k=' + x.k : 'quiz.html?id=' + id + '&quiz=' + x.quizId;
+  const TYPE_ICON = { Video: 'bi-play-circle', Reading: 'bi-file-text', Assignment: 'bi-pencil-square' };
+
+  /* ---------- content blocks ---------- */
+  function block(b) {
+    const title = b.title ? '<h3>' + esc(b.title) + '</h3>' : '';
+    if (b.type === 'text') return '<div class="block">' + title + '<p>' + esc(b.body) + '</p></div>';
+    if (b.type === 'code') return '<div class="block code-wrap"><span class="code-lang">' + esc(b.lang || 'code') + '</span><pre class="code-block"><code>' + esc(b.body) + '</code></pre></div>';
+    if (b.type === 'tip') return '<div class="block callout tip"><i class="bi bi-lightbulb-fill"></i><div><b>Tip</b><br>' + esc(b.body) + '</div></div>';
+    if (b.type === 'warning') return '<div class="block callout warn"><i class="bi bi-exclamation-triangle-fill"></i><div><b>Watch out</b><br>' + esc(b.body) + '</div></div>';
+    if (b.type === 'steps') return '<div class="block">' + title + '<ol class="steps-list">' + b.items.map(t => '<li>' + esc(t) + '</li>').join('') + '</ol></div>';
+    if (b.type === 'list') return '<div class="block">' + title + '<ul class="checks mb-0">' + b.items.map(t => '<li><i class="bi bi-check-circle-fill"></i> ' + esc(t) + '</li>').join('') + '</ul></div>';
+    return '';
+  }
+  const player = l => l.type !== 'Video' ? '' : l.videoUrl ? '<div class="video-box mb-4"><iframe src="' + esc(l.videoUrl) + '" allowfullscreen></iframe></div>'
+    : '<div class="video-box mb-4"><div><i class="bi bi-play-circle-fill play"></i><div class="mt-2">' + esc(l.title) + '</div><small class="text-white-50">Video placeholder · ' + l.minutes + ' min · set Lessons.videoUrl to embed a real video</small></div></div>';
+
+  /* ---------- sidebar ---------- */
+  function side(cur) {
+    return curr.map((s, i) => {
+      const open = cur ? cur.si === i : i === 0, secItems = seq.filter(x => x.si === i);
+      const dn = secItems.filter(x => x.t === 'l' ? done.has(x.k) : quizzes[x.quizId]?.passed).length;
+      return '<div class="mb-1"><button class="sec-title" data-sec="' + i + '"><span>Section ' + (i + 1) + ': ' + esc(s.title) + '</span><small>' + dn + '/' + secItems.length + ' <i class="bi bi-chevron-' + (open ? 'up' : 'down') + '"></i></small></button>' +
+        '<div class="' + (open ? '' : 'd-none') + '" id="secbody' + i + '">' + secItems.map(x => {
+          if (x.t === 'l') { const d = done.has(x.k), on = cur && cur.t === 'l' && cur.k === x.k;
+            return '<a class="nav-item-row' + (on ? ' active' : '') + (d ? ' done' : '') + '" href="' + hrefOf(x) + '"><i class="st bi ' + (d ? 'bi-check-circle-fill' : TYPE_ICON[x.type] || 'bi-circle') + '"></i><span class="tt">' + esc(x.title) + '</span><span class="mm">' + x.minutes + ' min</span></a>'; }
+          const q = quizzes[x.quizId], ok = !!q?.passed, lock = !quizOpen(x.si);
+          return '<' + (lock ? 'div' : 'a href="' + hrefOf(x) + '"') + ' class="nav-item-row quiz' + (ok ? ' done' : '') + (lock ? ' locked' : '') + '"' + (lock ? ' title="Finish the lessons in this section to unlock"' : '') + '><i class="st bi ' + (ok ? 'bi-patch-check-fill' : lock ? 'bi-lock-fill' : 'bi-patch-question-fill') + '"></i><span class="tt">' + esc(x.title) + '</span><span class="mm">' + (q?.best != null && q.attempts ? 'Best ' + q.best + '%' : 'Quiz · ' + x.count + ' Q') + '</span></' + (lock ? 'div' : 'a') + '>';
+        }).join('') + '</div></div>';
+    }).join('');
+  }
+
+  /* ---------- page ---------- */
+  function draw(l, cur) {
+    const i = seq.indexOf(cur), prev = seq[i - 1], next = seq[i + 1], isDone = done.has(cur.k), last = !next;
+    const nextLabel = !next ? 'Finish' : next.t === 'q' ? 'Take quiz' : 'Next lesson';
+    const nextTitle = next ? (next.t === 'q' ? 'Quiz: ' : '') + next.title : '';
+    document.title = 'LearnHub - ' + l.title;
+    $('#page').innerHTML = `
+      <div class="lesson-top">
+        <div><a href="course.html?id=${id}" class="text-white-50 small"><i class="bi bi-arrow-left"></i> Back to course page</a>
+          <div class="fw-semibold">${esc(c.title)}</div></div>
+        <div class="d-flex align-items-center gap-3" style="min-width:240px"><div class="progress flex-grow-1" style="height:8px"><div class="progress-bar" style="width:${pct()}%"></div></div><small class="text-secondary text-nowrap">${pct()}% complete</small></div>
+      </div>
+      ${admin && !enrolled ? '<div class="alert alert-info py-2 small"><i class="bi bi-shield-check"></i> Admin preview: progress is not tracked.</div>' : ''}
+      <div class="learn-wrap">
+        <aside class="learn-side glass">${side(cur)}</aside>
+        <section>
+          <div class="glass p-4 lesson-body">
+            <div class="d-flex flex-wrap gap-2 mb-2"><span class="badge bg-primary">${esc(l.type || 'Lesson')}</span><span class="badge bg-secondary">${l.minutes} min</span><span class="badge bg-dark border">Section ${cur.si + 1}: ${esc(l.section)}</span></div>
+            <h1 class="mb-4">${esc(l.title)}</h1>
+            ${player(l)}
+            ${l.objectives?.length ? '<div class="block"><h3>What you will learn</h3><ul class="checks mb-0">' + l.objectives.map(t => '<li><i class="bi bi-check-circle-fill"></i> ' + esc(t) + '</li>').join('') + '</ul></div>' : ''}
+            ${(l.blocks || []).map(block).join('')}
+            ${l.task ? '<div class="block task-card"><b><i class="bi bi-pencil-square"></i> Practice task</b><p class="mb-0 mt-1">' + esc(l.task) + '</p></div>' : ''}
+            ${l.resources?.length ? '<div class="block"><h3>Resources</h3><ul class="checks mb-0">' + l.resources.map(r => '<li><i class="bi bi-paperclip"></i> ' + esc(r.name) + ' <span class="badge bg-secondary">' + esc(r.type) + '</span></li>').join('') + '</ul></div>' : ''}
+          </div>
+          <div class="learn-bar">
+            ${prev ? '<a class="btn btn-outline-light" href="' + hrefOf(prev) + '"><i class="bi bi-chevron-left"></i> Previous</a>' : '<span></span>'}
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
+              ${tracked() ? '<button class="btn ' + (isDone ? 'btn-success' : 'btn-primary') + '" id="mark">' + (isDone ? '<i class="bi bi-check-lg"></i> Completed (click to undo)' : '<i class="bi bi-check2-circle"></i> Mark complete') + '</button>' : ''}
+              ${next ? '<a class="btn ' + (isDone || !tracked() ? 'btn-primary' : 'btn-outline-light') + '" id="next" href="' + hrefOf(next) + '" title="' + esc(nextTitle) + '">' + nextLabel + ' <i class="bi bi-chevron-right"></i></a>'
+                : '<a class="btn btn-outline-light" href="course.html?id=' + id + '">Back to course</a>'}
+            </div>
+          </div>
+          ${next && next.t === 'q' && !quizOpen(cur.si) ? '<p class="small text-secondary mt-2 mb-0"><i class="bi bi-lock"></i> Complete every lesson in this section to unlock the quiz.</p>' : ''}
+        </section>
+      </div>`;
+  }
+
+  async function show() {
+    try {
+      const l = await api('/courses/' + id + '/lessons/' + k);
+      draw(l, seq.find(x => x.t === 'l' && x.k === k));
+      scrollTo({ top: 0 });
+    } catch (x) { toast(x.message || 'Could not load lesson', 'danger'); setTimeout(() => location.href = 'course.html?id=' + id, 1200); }
+  }
+
+  async function mark() {
+    const now = !done.has(k);
+    try {
+      const res = await api('/courses/' + id + '/progress', 'PUT', { lesson: k, done: now });
+      now ? done.add(k) : done.delete(k);
+      if (now && res?.courseCompleted) { toast('Course completed! 🎉'); return setTimeout(() => location.href = 'congrats.html?id=' + id, 1200); }
+      const i = seq.findIndex(x => x.t === 'l' && x.k === k), nx = seq[i + 1];
+      if (now && nx) {
+        if (nx.t === 'q') { toast('Section lessons done. Your quiz is ready!', 'info'); return setTimeout(() => location.href = hrefOf(nx), 900); }
+        return location.href = hrefOf(nx);
+      }
+      if (now) toast('Lesson complete');
+      show();
+    } catch (x) { toast(x.message || 'Failed', 'danger'); }
+  }
+
+  try {
+    c = await api('/courses/' + id);
+    const p = await api('/courses/' + id + '/progress'); enrolled = p.enrolled; done = new Set(p.completed); quizzes = p.quizzes || {};
+    if (!enrolled && !admin) { flash('Enroll in this course to start learning', 'info'); return location.href = 'course.html?id=' + id; }
+    curr = dets(c).curriculum || []; buildSeq();
+    if (!seq.some(x => x.t === 'l')) { $('#page').innerHTML = '<p class="text-center p-5 mb-0">This course has no lessons yet.</p>'; return; }
+    k = new URLSearchParams(location.search).get('k');
+    if (!k || !lessonKeys().includes(k)) { k = lessonKeys().find(x => !done.has(x)) || lessonKeys()[0]; history.replaceState(null, '', 'learn.html?id=' + id + '&k=' + k); }
+    $('#page').onclick = e => {
+      const sb = e.target.closest('[data-sec]'); if (sb) { const b = $('#secbody' + sb.dataset.sec); b.classList.toggle('d-none'); sb.querySelector('i').className = 'bi bi-chevron-' + (b.classList.contains('d-none') ? 'down' : 'up'); return; }
+      if (e.target.closest('#mark')) return mark();
+    };
+    show();
+  } catch (x) { $('#page').innerHTML = '<p class="text-center p-5 mb-0">' + esc(x.message || 'Course not found') + '</p>'; }
+})();
+</script>
+</body>
+</html>
