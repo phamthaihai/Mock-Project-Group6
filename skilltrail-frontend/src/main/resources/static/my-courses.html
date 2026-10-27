@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+    <style>
+        /* Keep course-card actions aligned even when titles wrap */
+        .course-progress-card {
+            display: flex;
+            flex-direction: column;
+            height: 100%
+        }
+
+        .course-progress-card>a:first-child {
+            display: flex;
+            flex: 1 1 auto;
+            flex-direction: column;
+            min-height: 0
+        }
+
+        .course-progress-card>a:first-child>.p-3 {
+            flex: 1 1 auto
+        }
+
+        .course-progress-card>.px-3.pb-3 {
+            margin-top: auto
+        }
+    </style>
+    <title>SkillTrail · My learning</title>
+</head>
+
+<body>
+    <main class="container py-5" style="max-width:1180px">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+            <div><span class="eyebrow">YOUR LEARNING SPACE</span>
+                <h1 class="display-5 fw-bold mt-2">My learning</h1>
+                <p class="text-secondary mb-0">Pick up where you left off, celebrate progress, and find your next skill.
+                </p>
+            </div><a class="btn btn-primary" href="index.html#courses"><i class="bi bi-compass me-1"></i> Explore
+                courses</a>
+        </div>
+        <div class="learning-stats row g-3 mb-4" id="stats"></div>
+        <section class="mb-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0"><i class="bi bi-play-circle me-2"></i>In progress</h2><span
+                    class="text-secondary small" id="activeCount"></span>
+            </div>
+            <div class="row g-4" id="active"></div>
+        </section>
+        <section class="mb-5">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 mb-0"><i class="bi bi-patch-check me-2"></i>Completed</h2><span
+                    class="text-secondary small" id="doneCount"></span>
+            </div>
+            <div class="row g-4" id="done"></div>
+        </section>
+        <section>
+            <h2 class="h4 mb-3"><i class="bi bi-stars me-2"></i>Suggested next</h2>
+            <div class="row g-4" id="suggestions"></div>
+        </section>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+        if (guard()) (async () => { try { const [courses, enrollments] = await Promise.all([api('/courses'), api('/enrollments/me')]); const all = Array.isArray(courses) ? courses : []; const mine = Array.isArray(enrollments) ? enrollments : []; const card = (c, e, mode) => { const p = Number(e?.percent ?? e?.progressPercent ?? 0); const title = esc(c.title); return `<div class="col-md-6 col-xl-4"><article class="course-progress-card glass h-100"><a href="course.html?id=${c.courseId}" class="text-decoration-none">${imgTag(c, 'progress-cover', c.title)}<div class="p-3"><div class="d-flex justify-content-between gap-2 mb-2"><span class="badge rounded-pill text-bg-dark">${esc(c.category || 'Learning')}</span><span class="small text-secondary">${mode === 'done' ? 'Completed' : p + '% complete'}</span></div><h3 class="h5 text-reset">${title}</h3><p class="small text-secondary mb-3">${esc(c.instructor?.fullName || c.instructorName || c.instructor || 'SkillTrail instructor')} · ${c.durationHours || 'Self-paced'} ${typeof c.durationHours === 'number' ? 'hours' : ''}</p>${mode !== 'done' ? `<div class="progress mb-3" style="height:7px"><div class="progress-bar" style="width:${Math.max(0, Math.min(100, p))}%"></div></div>` : ''}</div></a><div class="px-3 pb-3">${mode === 'done' ? `<a class="btn btn-outline-light w-100" href="congrats.html?id=${c.courseId}"><i class="bi bi-award me-1"></i> View certificate</a>` : `<a class="btn btn-primary w-100" target="_blank" rel="noopener" href="learn.html?id=${c.courseId}"><i class="bi bi-play-fill me-1"></i>${p ? 'Continue learning' : 'Start learning'}</a>`}</div></article></div>` }; const ids = new Set(mine.map(e => Number(e.courseId))); const enrolled = all.filter(c => ids.has(Number(c.courseId))); const getProgress = e => Number(e.percent ?? e.progressPercent ?? 0); const done = enrolled.filter(c => { const e = mine.find(x => Number(x.courseId) === Number(c.courseId)); return getProgress(e) >= 100 || e?.completed === true || e?.status === 'COMPLETED' }); const active = enrolled.filter(c => !done.includes(c)); const next = all.filter(c => !ids.has(Number(c.courseId)) && c.status !== 'DRAFT').sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 3); $('#stats').innerHTML = [['bi-collection-play', enrolled.length, 'Courses enrolled'], ['bi-lightning-charge', active.length, 'In progress'], ['bi-award', done.length, 'Completed']].map(x => `<div class="col-4"><div class="glass stat-card p-3"><i class="bi ${x[0]}"></i><div class="h2 fw-bold mt-2 mb-0">${x[1]}</div><div class="small text-secondary">${x[2]}</div></div></div>`).join(''); $('#activeCount').textContent = active.length + ' courses'; $('#doneCount').textContent = done.length + ' courses'; $('#active').innerHTML = active.map(c => card(c, mine.find(e => Number(e.courseId) === Number(c.courseId)), 'active')).join('') || '<div class="col-12"><div class="empty-state glass p-4"><i class="bi bi-cup-hot"></i><h3 class="h5 mt-2">A fresh start</h3><p class="text-secondary">Enroll in a course and your learning progress will show up here.</p><a href="index.html#courses" class="btn btn-primary">Find your first course</a></div></div>'; $('#done').innerHTML = done.map(c => card(c, mine.find(e => Number(e.courseId) === Number(c.courseId)), 'done')).join('') || '<p class="text-secondary">Your completed courses and certificates will appear here.</p>'; $('#suggestions').innerHTML = next.map(c => `<div class="col-md-6 col-xl-4">${typeof card === 'function' ? `<article class="course-progress-card glass h-100"><a href="course.html?id=${c.courseId}" class="text-decoration-none">${imgTag(c, 'progress-cover', c.title)}<div class="p-3"><span class="badge rounded-pill text-bg-dark">${esc(c.category || 'Explore')}</span><h3 class="h5 text-reset mt-2">${esc(c.title)}</h3><p class="small text-secondary">${esc(c.instructor?.fullName || c.instructor || 'Expert instructor')}</p><div class="text-warning">★ ${Number(c.rating || 4.8).toFixed(1)} <span class="text-secondary">· ${esc(c.level || 'All levels')}</span></div></div></a><div class="px-3 pb-3"><a class="btn btn-outline-light w-100" href="course.html?id=${c.courseId}">View course</a></div></article>` : ''}</div>`).join('') || '<p class="text-secondary">You are enrolled in everything available. Nice work!</p>'; } catch (e) { $('#active').innerHTML = '<div class="alert alert-warning">Could not load your learning data. Try switching to Mock data mode using the button in the top navigation.</div>'; console.error(e) } })();
+    </script>
+</body>
+
+</html>

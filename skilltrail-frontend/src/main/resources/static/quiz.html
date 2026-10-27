@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+  <link href="css/learn.css" rel="stylesheet">
+  <title>SkillTrail - Quiz</title>
+</head>
+
+<body>
+  <main class="flex-grow-1 container py-4" id="page">
+    <div class="text-center p-5">
+      <div class="spinner-border"></div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/seed-content.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    /* quiz.html?id=<courseId>&quiz=<quizId> */
+    if (guard()) (async () => {
+      const P = new URLSearchParams(location.search), courseId = P.get('id'), quizId = P.get('quiz');
+      let qz, c, view = 'intro', cur = 0, answers = {}, left = 0, timer = null, result = null;
+
+      const answered = q => (answers[q.questionId] || []).length > 0;
+      const fmtTime = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+
+      /* the item that follows this quiz: next quiz in the section, else the first lesson of the next section */
+      function nextStep(res) {
+        const sections = c.sections || [], si = sections.findIndex(s => s.quiz && s.quiz.quizId === +qz.quizId);
+        if (res?.courseCompleted) return { href: 'congrats.html?id=' + courseId, label: 'Get my certificate', icon: 'bi-award-fill' };
+        if (sections[si + 1]) return { href: 'learn.html?id=' + courseId + '&k=' + (si + 2) + '.1', label: 'Next section: ' + sections[si + 1].title, icon: 'bi-chevron-right' };
+        return { href: 'course.html?id=' + courseId, label: 'Back to course', icon: 'bi-arrow-left' };
+      }
+      const crumb = () => '<a href="learn.html?id=' + courseId + '&k=' + qz.sectionIndex + '.1" class="text-white-50 small"><i class="bi bi-arrow-left"></i> ' + esc(qz.courseTitle) + ' · Section ' + qz.sectionIndex + '</a>';
+
+      /* ---------- intro ---------- */
+      function intro() {
+        $('#page').innerHTML = `<div class="mb-3">${crumb()}</div>
+    <div class="glass quiz-card text-center">
+      <div class="trophy" style="background:linear-gradient(135deg,#6d5dfc,#22d3ee);box-shadow:0 0 0 10px rgba(109,93,252,.15)"><i class="bi bi-patch-question-fill"></i></div>
+      <span class="badge bg-secondary mb-2">Section ${qz.sectionIndex}: ${esc(qz.sectionTitle)}</span>
+      <h2 class="mb-2">${esc(qz.title)}</h2>
+      <p class="text-secondary">${esc(qz.description || '')}</p>
+      <div class="row g-3 my-4 text-start justify-content-center">
+        ${[['bi-list-ol', qz.questions.length + ' questions'], ['bi-bullseye', 'Pass mark ' + qz.passPercent + '%'], ['bi-stopwatch', qz.timeLimitMin ? qz.timeLimitMin + ' minutes' : 'No time limit'], ['bi-arrow-repeat', 'Retake any time']]
+            .map(x => '<div class="col-6 col-md-3"><div class="glass p-3 h-100 text-center"><i class="bi ' + x[0] + ' fs-4 text-info"></i><div class="small mt-1">' + x[1] + '</div></div></div>').join('')}
+      </div>
+      ${qz.attempts ? '<p class="mb-3">' + (qz.passed ? '<span class="badge bg-success"><i class="bi bi-patch-check-fill"></i> Passed</span> ' : '') + 'Best score: <b>' + qz.best + '%</b> · Attempts: <b>' + qz.attempts + '</b></p>' : ''}
+      <button class="btn btn-primary btn-lg px-5" id="start"><i class="bi bi-play-fill"></i> ${qz.attempts ? 'Try again' : 'Start quiz'}</button>
+      <p class="small text-secondary mt-3 mb-0">Some questions allow more than one answer. Read each one carefully.</p>
+    </div>`;
+        $('#start').onclick = start;
+      }
+
+      function start() {
+        answers = {}; cur = 0; result = null; view = 'run';
+        clearInterval(timer);
+        if (qz.timeLimitMin) { left = qz.timeLimitMin * 60; timer = setInterval(() => { left--; const t = $('#timer'); if (t) { t.textContent = fmtTime(Math.max(left, 0)); t.classList.toggle('low', left <= 60); } if (left <= 0) { clearInterval(timer); toast('Time is up. Submitting your answers.', 'warning'); submit(); } }, 1000); }
+        run();
+      }
+
+      /* ---------- one question at a time ---------- */
+      function run() {
+        const q = qz.questions[cur], sel = answers[q.questionId] || [], n = qz.questions.length, last = cur === n - 1, count = qz.questions.filter(answered).length;
+        $('#page').innerHTML = `
+    <div class="quiz-card glass">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div><div class="small text-secondary">${esc(qz.title)}</div><b>Question ${cur + 1} of ${n}</b></div>
+        ${qz.timeLimitMin ? '<span class="timer" id="timer"><i class="bi bi-stopwatch"></i> ' + fmtTime(Math.max(left, 0)) + '</span>' : ''}
+      </div>
+      <div class="progress mb-3" style="height:6px"><div class="progress-bar" style="width:${count / n * 100}%"></div></div>
+      <div class="qdots mb-4">${qz.questions.map((x, i) => '<button class="qdot' + (answered(x) ? ' answered' : '') + (i === cur ? ' current' : '') + '" data-go="' + i + '" aria-label="Question ' + (i + 1) + '">' + (i + 1) + '</button>').join('')}</div>
+      <h4 class="mb-1">${esc(q.text)}</h4>
+      <p class="small text-info mb-3">${q.multi ? '<i class="bi bi-ui-checks"></i> Select all that apply' : '<i class="bi bi-record-circle"></i> Select one answer'}</p>
+      ${q.options.map(o => {
+          const on = sel.includes(o.optionId);
+          return '<button class="opt' + (q.multi ? ' multi' : '') + (on ? ' sel' : '') + '" data-opt="' + o.optionId + '"><span class="mk">' + (on ? '<i class="bi bi-check-lg"></i>' : '') + '</span><span>' + esc(o.text) + '</span></button>';
+        }).join('')}
+      <div class="d-flex justify-content-between align-items-center mt-4 gap-2 flex-wrap">
+        <button class="btn btn-outline-light" id="prev" ${cur ? '' : 'disabled'}><i class="bi bi-chevron-left"></i> Previous</button>
+        <small class="text-secondary">${count}/${n} answered</small>
+        ${last ? '<button class="btn btn-success" id="submit"><i class="bi bi-send-check"></i> Submit quiz</button>' : '<button class="btn btn-primary" id="next">Next <i class="bi bi-chevron-right"></i></button>'}
+      </div>
+    </div>`;
+      }
+
+      async function submit(force) {
+        const missing = qz.questions.length - qz.questions.filter(answered).length;
+        if (!force && missing && !await confirmBox(missing + ' question' + (missing > 1 ? 's are' : ' is') + ' unanswered and will count as wrong. Submit anyway?', { title: 'Submit quiz?', confirmText: 'Submit', danger: false })) return;
+        clearInterval(timer);
+        try {
+          const raw = await api('/quizzes/' + quizId + '/attempts', 'POST', { answers: Object.fromEntries(Object.entries(answers).map(([id, vals]) => [id, Array.isArray(vals) ? vals[0] : vals])) });
+          result = {
+            ...raw, scorePercent: raw.score, totalCount: raw.total, passPercent: raw.passScore, tracked: true, courseCompleted: !!raw.courseCompleted,
+            review: qz.questions.map(question => {
+              const selected = answers[question.questionId] || []; const rightId = raw.correct?.[question.questionId]; return {
+                questionId: question.questionId, selected, correctOptionIds: rightId == null ? [] : [rightId],
+                correct: selected.length === 1 && String(selected[0]) === String(rightId), explanation: ''
+              };
+            })
+          };
+          view = 'result'; showResult();
+        }
+        catch (x) { toast(x.message || 'Could not submit', 'danger'); }
+      }
+
+      /* ---------- results + review ---------- */
+      function showResult() {
+        const r = result, ok = r.passed, step = nextStep(r), by = Object.fromEntries(r.review.map(x => [x.questionId, x]));
+        $('#page').innerHTML = `<div class="mb-3">${crumb()}</div>
+    <div class="quiz-card glass">
+      <div class="text-center mb-4">
+        <div class="score-ring" style="--p:${r.scorePercent};--c:${ok ? '#22c55e' : '#f59e0b'}"><div>${r.scorePercent}%</div></div>
+        <h2 class="mb-1">${ok ? 'Great job, you passed! 🎉' : 'Not quite there yet'}</h2>
+        <p class="text-secondary mb-3">You answered <b class="text-reset">${r.correctCount} of ${r.totalCount}</b> correctly. The pass mark is ${r.passPercent}%.${!r.tracked ? ' (Admin preview: this attempt is not saved.)' : ''}</p>
+        <div class="d-flex flex-wrap justify-content-center gap-2">
+          ${ok ? '<a class="btn btn-primary" href="' + step.href + '"><i class="bi ' + step.icon + '"></i> ' + esc(step.label) + '</a>' : '<button class="btn btn-primary" id="retry"><i class="bi bi-arrow-repeat"></i> Try again</button><a class="btn btn-outline-light" href="learn.html?id=' + courseId + '&k=' + qz.sectionIndex + '.1">Review lessons</a>'}
+          ${ok ? '<button class="btn btn-outline-light" id="retry"><i class="bi bi-arrow-repeat"></i> Retake for a better score</button>' : ''}
+          <a class="btn btn-outline-light" href="course.html?id=${courseId}">Course page</a>
+        </div>
+      </div>
+      <h5 class="mb-3"><i class="bi bi-clipboard-check"></i> Review your answers</h5>
+      <div class="qdots mb-3">${qz.questions.map((q, i) => '<a href="#rq' + i + '" class="qdot ' + (by[q.questionId]?.correct ? 'ok' : 'bad') + ' text-decoration-none d-grid place-items-center" style="place-items:center">' + (i + 1) + '</a>').join('')}</div>
+      ${qz.questions.map((q, i) => {
+          const rv = by[q.questionId] || { selected: [], correctOptionIds: [] };
+          return '<div class="glass p-3 mb-3" id="rq' + i + '"><div class="d-flex justify-content-between gap-2"><b>' + (i + 1) + '. ' + esc(q.text) + '</b><span class="badge ' + (rv.correct ? 'bg-success' : 'bg-danger') + ' align-self-start">' + (rv.correct ? 'Correct' : 'Incorrect') + '</span></div><div class="mt-3">' +
+            q.options.map(o => {
+              const picked = rv.selected.includes(o.optionId), right = rv.correctOptionIds.includes(o.optionId);
+              const cls = picked && right ? 'right' : picked ? 'wrong' : right ? 'missed' : '';
+              const icon = picked && right ? 'bi-check-lg' : picked ? 'bi-x-lg' : right ? 'bi-check-lg' : '';
+              return '<div class="opt ' + cls + (q.multi ? ' multi' : '') + '" style="cursor:default"><span class="mk">' + (icon ? '<i class="bi ' + icon + '"></i>' : '') + '</span><span>' + esc(o.text) + (picked ? ' <small class="text-secondary">(your answer)</small>' : right ? ' <small class="text-success">(correct answer)</small>' : '') + '</span></div>';
+            }).join('') +
+            '</div>' + (rv.explanation ? '<div class="explain"><i class="bi bi-info-circle"></i> ' + esc(rv.explanation) + '</div>' : '') + '</div>';
+        }).join('')}
+    </div>`;
+        $('#retry').onclick = () => { qz.attempts++; start(); };
+        if (ok) { toast('Quiz passed with ' + r.scorePercent + '%'); if (r.courseCompleted) { confetti(); toast('Course completed! Your certificate is ready.', 'success'); } }
+      }
+
+      $('#page').onclick = e => {
+        if (view !== 'run') return;
+        const q = qz.questions[cur], o = e.target.closest('[data-opt]');
+        if (o) {
+          const id = +o.dataset.opt, s = answers[q.questionId] || [];
+          answers[q.questionId] = q.multi ? (s.includes(id) ? s.filter(x => x !== id) : [...s, id]) : [id]; return run();
+        }
+        const g = e.target.closest('[data-go]'); if (g) { cur = +g.dataset.go; return run(); }
+        if (e.target.closest('#next')) { cur++; return run(); }
+        if (e.target.closest('#prev')) { cur--; return run(); }
+        if (e.target.closest('#submit')) return submit();
+      };
+      addEventListener('beforeunload', e => { if (view === 'run' && Object.keys(answers).length) { e.preventDefault(); e.returnValue = ''; } });
+
+      try {
+        qz = await api('/quizzes/' + quizId);
+        c = await api('/courses/' + qz.courseId);
+        const section = (c.sections || []).find(s => s.quiz && s.quiz.quizId === +quizId);
+        if (!section) throw new Error('Quiz is not part of this course.');
+        qz.title = qz.title || section.quiz.title; qz.sectionIndex = section.position; qz.sectionTitle = section.title; qz.courseTitle = c.title;
+        qz.passPercent = qz.passScore || section.quiz.passScore || 70; qz.timeLimitMin = 0; qz.attempts = qz.attemptsUsed || 0;
+        qz.best = qz.bestScore; qz.passed = qz.passed || false; qz.description = 'Check what you learned in this section.';
+        qz.questions = (qz.questions || []).map(question => ({ ...question, multi: false })); intro();
+      } catch (x) { flash(x.message || 'Quiz not available', 'warning'); location.href = 'course.html?id=' + courseId; }
+    })();
+  </script>
+</body>
+
+</html>

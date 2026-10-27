@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" role="img" aria-label="Course artwork">
+ <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#24235d"/><stop offset="1" stop-color="#087e8b"/></linearGradient><radialGradient id="r"><stop stop-color="#7c5cff" stop-opacity=".9"/><stop offset="1" stop-color="#7c5cff" stop-opacity="0"/></radialGradient></defs>
+ <rect width="720" height="420" fill="url(#g)"/><circle cx="570" cy="90" r="230" fill="url(#r)"/><circle cx="130" cy="370" r="190" fill="url(#r)"/>
+ <g fill="none" stroke="#ffffff" stroke-opacity=".22" stroke-width="2"><path d="M0 70H720M0 140H720M0 210H720M0 280H720M0 350H720M80 0V420M160 0V420M240 0V420M320 0V420M400 0V420M480 0V420M560 0V420M640 0V420"/></g>
+ <g transform="translate(292 112)" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M-85 12 0-28 85 12 0 52Z"/><path d="M-55 33v44q55 34 110 0V33M85 12v64"/><circle cx="85" cy="88" r="7" fill="#fff" stroke="none"/></g>
+ <text x="360" y="300" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="24" font-weight="700">SKILLTRAIL</text><text x="360" y="332" text-anchor="middle" fill="#d8f7ff" font-family="Arial,sans-serif" font-size="15">LEARN SOMETHING NEW</text>
+</svg>

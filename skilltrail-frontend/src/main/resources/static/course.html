@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="css/style.css" rel="stylesheet">
+<title>SkillTrail - Course</title>
+</head>
+<body>
+<main class="flex-grow-1" id="page"><div class="text-center p-5"><div class="spinner-border"></div></div></main>
+<div class="modal fade" id="lessonModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg"><div class="modal-content">
+ <div class="modal-header"><h5 class="modal-title" id="lTitle"></h5><button class="btn-close" data-bs-dismiss="modal"></button></div>
+ <div class="modal-body" id="lBody"></div>
+</div></div></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/common.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+const me = state.user, isAdmin = me?.role === 'ADMIN';
+let c, prog, reviews = [], rate = 5;
+const owner = () => me && c.instructor.userId === me.userId, staff = () => isAdmin || owner(), canOpen = () => prog.enrolled || staff();
+
+function lessonRow(l) {
+    const open = l.preview || canOpen(), dn = prog.completed.includes(l.lessonId);
+    return '<li class="lesson' + (open ? ' open' : '') + (dn ? ' done' : '') + '" data-act="lesson" data-id="' + l.lessonId + '"><i class="bi bi-' + (dn ? 'check-circle-fill' : open ? LICON[l.type] : 'lock') + '"></i><span>' + esc(l.title) + '</span>' +
+        (l.preview && !canOpen() ? '<small class="ltype text-info">Preview</small>' : '') + '<small class="ltype">' + l.type + '</small><small>' + l.minutes + ' min</small></li>';
+}
+function quizRow(q) {
+    return '<li class="lesson' + (canOpen() ? ' open' : '') + '" data-act="quiz" data-id="' + q.quizId + '"><i class="bi bi-' + (canOpen() ? 'patch-question' : 'lock') + '"></i><span>Quiz: ' + esc(q.title) + '</span><small class="ltype">' + q.questionCount + ' questions · pass ' + q.passScore + '%</small></li>';
+}
+function reviewsHtml() {
+    const mineR = me && reviews.find(r => r.userId === me.userId);
+    const form = prog.enrolled ? '<div class="review mb-3"><div class="fw-semibold mb-1">' + (mineR ? 'Edit your review' : 'Write a review') + '</div><div class="starpick mb-2" id="starpick">' +
+        [1, 2, 3, 4, 5].map(i => '<i class="bi bi-star' + (i <= rate ? '-fill' : '') + '" data-act="star" data-id="' + i + '"></i>').join('') + '</div><textarea id="rcomment" class="form-control mb-2" rows="2" placeholder="Share your experience">' + esc(mineR?.comment || '') + '</textarea>' +
+        '<button class="btn btn-primary btn-sm" data-act="saveReview">' + (mineR ? 'Update review' : 'Submit review') + '</button>' + (mineR ? ' <button class="btn btn-outline-danger btn-sm" data-act="delReview" data-id="' + mineR.reviewId + '">Delete</button>' : '') + '</div>' : '';
+    return '<div class="glass p-4 mb-4" id="reviews"><div class="d-flex flex-wrap justify-content-between align-items-center mb-3"><h4 class="mb-0"><i class="bi bi-chat-quote"></i> Student reviews</h4><div><span class="text-warning fs-5">★ ' + (c.ratingCount ? c.rating : '–') + '</span> <span class="text-secondary small">' + c.ratingCount + ' reviews</span></div></div>' + form +
+        '<div class="row g-3">' + (reviews.map(r => '<div class="col-md-6"><div class="review h-100"><div class="d-flex justify-content-between"><div class="person"><span class="avatar">' + esc(r.userName.split(' ').map(w => w[0]).slice(0, 2).join('')) + '</span><div><div class="fw-semibold">' + esc(r.userName) + '</div><div class="text-warning small">' + stars(r.rating) + ' <span class="text-secondary">· ' + new Date(r.createdAt).toLocaleDateString() + '</span></div></div></div>' +
+        (isAdmin ? '<button class="btn btn-sm btn-outline-danger align-self-start" data-act="delReview" data-id="' + r.reviewId + '"><i class="bi bi-trash"></i></button>' : '') + '</div><p class="mt-3 mb-0">' + esc(r.comment) + '</p></div></div>').join('') || '<p class="text-secondary mb-0">No reviews yet.</p>') + '</div></div>';
+}
+function panel() {
+    const next = prog.nextLessonId ? '&lesson=' + prog.nextLessonId : '';
+    const progress = '<h5>Your progress</h5><div class="progress mb-2" style="height:8px"><div class="progress-bar" style="width:' + prog.percent + '%"></div></div><small class="text-secondary">' + prog.completed.length + ' of ' + c.lessonCount + ' lessons · ' + prog.percent + '%</small>' +
+        '<a href="learn.html?id=' + id + next + '" class="btn btn-primary w-100 mt-3">' + (prog.percent === 100 ? 'Review course' : prog.percent ? 'Continue learning' : 'Start learning') + '</a>';
+    if (staff()) return (isAdmin ? '<span class="admin-pill ms-0">ADMIN</span>' : '<span class="instr-pill ms-0">YOUR COURSE</span>') + ' ' + statusBadge(c.status) +
+        (c.rejectReason ? '<div class="alert alert-danger py-2 small mt-3 mb-0"><b>Rejected:</b> ' + esc(c.rejectReason) + '</div>' : '') +
+        '<p class="small text-secondary mt-3">You can open every lesson and quiz. Progress is not tracked unless you enroll.</p>' +
+        (prog.enrolled ? progress : (c.lessonCount ? '<a href="learn.html?id=' + id + '" class="btn btn-primary w-100">Open course (preview)</a>' : '')) +
+        (isAdmin && !prog.enrolled && c.status === 'PUBLISHED' ? '<button class="btn btn-outline-light w-100 mt-2" data-act="enroll">Enroll (no payment)</button>' : '') +
+        ''; 
+    if (prog.enrolled) return '<div class="badge bg-success mb-3">✓ You are enrolled</div>' + progress + '<button class="btn btn-outline-danger w-100 mt-2" data-act="unenroll">Unenroll</button>';
+    return '<div class="price-big">' + money(c.price) + '</div><button class="btn btn-primary w-100 mt-3" data-act="enroll">' + (c.price === 0 ? 'Enroll for free' : 'Buy now') + '</button>' +
+        '<ul class="checks small mt-4 mb-0"><li><i class="bi bi-play-circle-fill"></i> ' + c.durationHours + ' hours of lessons</li><li><i class="bi bi-collection-play-fill"></i> ' + c.lessonCount + ' lessons in ' + c.sections.length + ' sections</li><li><i class="bi bi-infinity"></i> Lifetime access</li><li><i class="bi bi-award-fill"></i> Track your progress</li></ul>';
+}
+function draw() {
+    document.title = 'SkillTrail - ' + c.title;
+    const d = c.details || {};
+    $('#page').innerHTML = `
+    <div class="ev-hero ${catClass(c.category)}">${imgTag(c)}<div class="ev-hero-in"><div class="container">
+      <a href="index.html#courses" class="text-white-50 small"><i class="bi bi-arrow-left"></i> All courses</a>
+      <div class="mt-2"><span class="badge bg-primary">${ICON[c.category] || '📚'} ${esc(c.category)}</span> <span class="badge bg-secondary">${esc(c.level)}</span> ${c.status !== 'PUBLISHED' ? statusBadge(c.status) : ''}</div>
+      <h1 class="display-5 mt-2">${esc(c.title)}</h1><p class="lead mb-3">${esc(d.tagline || '')}</p>
+      <div class="d-flex flex-wrap gap-2">
+        <span class="meta-chip"><i class="bi bi-person-video3"></i> ${esc(c.instructor.fullName)}</span>
+        <span class="meta-chip text-warning">★ ${c.ratingCount ? c.rating : '–'} <span class="text-white-50">(${c.enrolledCount} students)</span></span>
+        <span class="meta-chip"><i class="bi bi-clock"></i> ${c.durationHours} hours</span><span class="meta-chip"><i class="bi bi-translate"></i> ${esc(c.language)}</span>
+      </div></div></div></div>
+    <div class="container py-5"><div class="row g-4"><div class="col-lg-8">
+      <div class="glass p-4 mb-4"><h4 class="mb-3"><i class="bi bi-info-circle"></i> About this course</h4><p class="mb-0">${esc(c.description)}</p></div>
+      ${d.learn && d.learn.length ? '<div class="glass p-4 mb-4"><h4 class="mb-3"><i class="bi bi-stars"></i> What you will learn</h4><ul class="checks mb-0">' + d.learn.map(t => '<li><i class="bi bi-check-circle-fill"></i> ' + esc(t) + '</li>').join('') + '</ul></div>' : ''}
+      <div class="glass p-4 mb-4" id="content"><h4 class="mb-1"><i class="bi bi-collection-play"></i> Course content</h4>
+       <p class="small text-secondary mb-3">${c.sections.length} sections · ${c.lessonCount} lessons · ${c.durationHours} hours${canOpen() ? '' : ' · Preview lessons are free to watch'}</p>
+       <div class="accordion">${c.sections.map((s, i) => '<div class="accordion-item"><h2 class="accordion-header"><button class="accordion-button' + (i ? ' collapsed' : '') + '" type="button" data-bs-toggle="collapse" data-bs-target="#sec' + i + '">' + esc(s.title) + '<small class="ms-2 text-secondary">' + s.lessons.length + ' lessons</small></button></h2><div id="sec' + i + '" class="accordion-collapse collapse' + (i ? '' : ' show') + '"><div class="accordion-body p-0"><ul class="lessons">' + s.lessons.map(lessonRow).join('') + (s.quiz ? quizRow(s.quiz) : '') + '</ul></div></div></div>').join('') || '<p class="text-secondary mb-0">No content yet.</p>'}</div></div>
+      ${d.requirements && d.requirements.length ? '<div class="glass p-4 mb-4"><h4 class="mb-3"><i class="bi bi-list-check"></i> Requirements</h4><ul class="checks mb-0">' + d.requirements.map(t => '<li><i class="bi bi-dot"></i> ' + esc(t) + '</li>').join('') + '</ul></div>' : ''}
+      ${d.skills && d.skills.length ? '<div class="glass p-4 mb-4"><h4 class="mb-3"><i class="bi bi-lightning-charge"></i> Skills you will gain</h4><div class="d-flex flex-wrap gap-2">' + d.skills.map(t => '<span class="tagchip">' + esc(t) + '</span>').join('') + '</div></div>' : ''}
+      <div class="glass p-4 mb-4"><h4 class="mb-3"><i class="bi bi-person-badge"></i> Your instructor</h4>
+       <div class="person"><span class="avatar">${esc(c.instructor.fullName.split(' ').map(w => w[0]).slice(0, 2).join(''))}</span><div><div class="fw-semibold">${esc(c.instructor.fullName)}</div><small class="text-secondary">${esc(c.category)} instructor</small></div></div>
+       <p class="mt-3 mb-0">${esc(d.instructorBio || '')}</p></div>
+      ${reviewsHtml()}
+     </div><div class="col-lg-4"><div class="glass p-4 sticky-panel">${panel()}</div></div></div></div>`;
+}
+async function load() {
+    try {
+        c = await api('/courses/' + id); prog = await api('/courses/' + id + '/progress'); reviews = await api('/courses/' + id + '/reviews');
+        rate = (me && reviews.find(r => r.userId === me.userId)?.rating) || 5; draw();
+    } catch (x) { $('#page').innerHTML = '<p class="text-center p-5 mb-0">' + esc(x.message || 'Course not found') + '</p>'; }
+}
+$('#page').onclick = async e => {
+    const t = e.target.closest('[data-act]'); if (!t) return; const act = t.dataset.act, tid = +t.dataset.id;
+    try {
+        if (act === 'lesson') {
+            const l = c.sections.flatMap(s => s.lessons).find(l => l.lessonId === tid);
+            if (!(l.preview || canOpen())) return toast('Enroll in this course to unlock this lesson', 'info');
+            if (canOpen()) return window.open('learn.html?id=' + id + '&lesson=' + tid, '_blank', 'noopener');
+            const full = await api('/lessons/' + tid); $('#lTitle').textContent = full.title; $('#lBody').innerHTML = lessonHtml(full); bootstrap.Modal.getOrCreateInstance('#lessonModal').show();
+        } else if (act === 'quiz') {
+            if (!canOpen()) return toast('Enroll in this course to take the quiz', 'info'); window.open('learn.html?id=' + id + '&quiz=' + tid, '_blank', 'noopener');
+        } else if (act === 'enroll') {
+            if (!me) return location.href = 'login.html?next=' + encodeURIComponent('course.html?id=' + id);
+            if (c.price === 0 || isAdmin) { await api('/courses/' + id + '/enroll', 'POST', {}); toast('You are enrolled! Happy learning.'); await load(); } else location.href = 'checkout.html?id=' + id;
+        } else if (act === 'unenroll') {
+            if (!await confirmBox('Unenroll from this course? Your progress will be lost.', { title: 'Unenroll?', confirmText: 'Unenroll' })) return;
+            await api('/courses/' + id + '/enroll', 'DELETE'); toast('Unenrolled', 'info'); await load();
+        } else if (act === 'star') {
+            rate = tid; $$('#starpick i').forEach((s, i) => { s.className = 'bi bi-star' + (i < rate ? '-fill' : ''); });
+        } else if (act === 'saveReview') {
+            const mineR = reviews.find(r => r.userId === me.userId), body = { rating: rate, comment: $('#rcomment').value };
+            mineR ? await api('/reviews/' + mineR.reviewId, 'PUT', body) : await api('/courses/' + id + '/reviews', 'POST', body); toast('Thanks for your review!'); await load();
+        } else if (act === 'delReview') {
+            if (!await confirmBox('Delete this review?', { title: 'Delete review', confirmText: 'Delete' })) return;
+            await api('/reviews/' + tid, 'DELETE'); toast('Review deleted', 'info'); await load();
+        }
+    } catch (x) { toast(x.message || 'Something went wrong', 'danger'); }
+};
+load();
+</script>
+</body>
+</html>
