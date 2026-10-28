@@ -602,39 +602,55 @@ function card(c, mine) {
     <div class="modal-body"><div id="cfIcon" class="cf-icon danger"><i class="bi bi-exclamation-triangle-fill"></i></div><h5 id="cfTitle" class="mb-2"></h5><p id="cfMsg" class="text-secondary mb-4"></p>
     <div class="d-flex gap-2"><button class="btn btn-outline-light flex-fill" data-bs-dismiss="modal">Cancel</button><button id="cfOk" class="btn btn-danger flex-fill"></button></div></div></div></div></div>`);
   
-  // Jump to #about / #contact / #courses when arriving from another page (e.g. My Courses, Profile).
-  // The home page keeps growing after load (course grid is fetched and rendered, images load),
-  // which pushes the target further down. So we re-align until the layout stops changing,
-  // and stop immediately if the visitor scrolls on their own.
-  let settle = null;
-  const scrollToHashTarget = () => {
-    if (settle) settle.stop();
+  /* ---- Smooth navigation to #courses / #about / #contact ---------------------------------
+     Arriving from another page (My Courses, Profile, ...): the home page opens at the top, waits until
+     its layout has finished loading (the course grid is fetched and rendered after load), then glides
+     down to the section. Waiting matters: scrolling while content is still being inserted would stop
+     short. Any wheel / touch / key press by the visitor cancels it. */
+  const NAV_OFFSET = 70; // sticky navbar height; must match scroll-padding-top in style.css
+  const glideTo = id => {
+    const t = id && document.getElementById(id);
+    if (t) scrollTo({ top: Math.max(0, t.getBoundingClientRect().top + scrollY - NAV_OFFSET), behavior: 'smooth' });
+    else scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const instantTop = () => { const r = document.documentElement, p = r.style.scrollBehavior; r.style.scrollBehavior = 'auto'; scrollTo(0, 0); r.style.scrollBehavior = p; };
+  let arrival = null;
+  const glideOnArrival = () => {
+    if (arrival) arrival.cancel();
     if (!location.hash || location.hash.length < 2) return;
     let id; try { id = decodeURIComponent(location.hash.slice(1)); } catch { return; }
-    const root = document.documentElement;
-    let quiet, ro, done = false;
-    const align = () => {
-      const t = document.getElementById(id); if (!t) return;
-      const prev = root.style.scrollBehavior; root.style.scrollBehavior = 'auto'; // instant, never a slow smooth scroll toward a moving target
-      t.scrollIntoView({ block: 'start' });
-      root.style.scrollBehavior = prev;
-    };
-    const stop = () => {
-      if (done) return; done = true; clearTimeout(quiet); clearTimeout(hard); ro && ro.disconnect();
-      ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach(ev => removeEventListener(ev, stop, true));
-    };
-    const bump = () => { if (done) return; align(); clearTimeout(quiet); quiet = setTimeout(stop, 1200); };
-    const hard = setTimeout(stop, 8000);
-    ['wheel', 'touchstart', 'mousedown', 'keydown'].forEach(ev => addEventListener(ev, stop, { capture: true, passive: true }));
-    if (window.ResizeObserver) { ro = new ResizeObserver(bump); ro.observe(document.body); }
-    bump();
-    settle = { stop };
+    if (!document.getElementById(id)) return;
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    const events = ['wheel', 'touchstart', 'mousedown', 'keydown'];
+    let ro, quiet, hard, finished = false;
+    const cancel = () => { if (finished) return; finished = true; clearTimeout(quiet); clearTimeout(hard); ro && ro.disconnect(); events.forEach(e => removeEventListener(e, cancel, true)); };
+    const go = () => { if (finished) return; cancel(); glideTo(id); };
+    const tick = () => { if (finished) return; instantTop(); clearTimeout(quiet); quiet = setTimeout(go, 450); }; // layout still changing: stay at top, restart the wait
+    events.forEach(e => addEventListener(e, cancel, { capture: true, passive: true }));
+    hard = setTimeout(go, 2500); // never wait longer than this
+    if (window.ResizeObserver) { ro = new ResizeObserver(tick); ro.observe(document.body); }
+    tick();
+    arrival = { cancel };
   };
+  glideOnArrival();
+  addEventListener('pageshow', e => { if (e.persisted) glideOnArrival(); });
 
-  scrollToHashTarget();
-  addEventListener('load', scrollToHashTarget);
-  addEventListener('pageshow', e => { if (e.persisted) scrollToHashTarget(); });
-  // same-page clicks (already on the home page) are handled natively with smooth scrolling
+  // Already on the home page: Home / Courses / About / Contact glide instead of jumping or reloading.
+  document.addEventListener('click', e => {
+    const a = e.target.closest && e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0 || a.target === '_blank') return;
+    let u; try { u = new URL(a.getAttribute('href'), location.href); } catch { return; }
+    const here = location.pathname.replace(/\/+$/, '') || '/';
+    const there = u.pathname.replace(/\/+$/, '') || '/';
+    const onHome = /\/(index\.html)?$/.test(location.pathname);
+    if (u.origin !== location.origin || !onHome || there !== here) return;
+    e.preventDefault();
+    if (arrival) arrival.cancel();
+    const id = u.hash.length > 1 ? decodeURIComponent(u.hash.slice(1)) : '';
+    glideTo(id);
+    history.pushState(null, '', u.pathname + u.search + u.hash);
+    document.querySelector('.navbar-collapse.show')?.classList.remove('show');
+  });
 
   addEventListener('scroll', () => $('#toTop').classList.toggle('show', scrollY > 300));
   $('#toTop').onclick = () => scrollTo({ top: 0, behavior: 'smooth' });

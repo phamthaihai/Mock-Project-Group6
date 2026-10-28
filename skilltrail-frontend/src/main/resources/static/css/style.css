@@ -196,6 +196,20 @@ footer .links a {
     padding: 0.65rem 0.9rem;
 }
 
+.form-select { color-scheme: dark; cursor: pointer; }
+
+/* Drop-down list (native popup): dark panel, light text, brand-coloured highlight */
+.form-select option {
+    background-color: #161233;
+    color: #e8ecff;
+}
+
+.form-select option:checked,
+.form-select option:hover {
+    background: #6d5dfc linear-gradient(0deg, #6d5dfc, #6d5dfc);
+    color: #fff;
+}
+
 .form-control:focus,
 .form-select:focus {
     background-color: rgba(255, 255, 255, 0.09);
