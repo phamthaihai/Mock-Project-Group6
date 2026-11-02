@@ -1,5 +1,10 @@
 /* ===== CONFIG: set USE_MOCK=false when the Spring Boot backend is ready ===== */
-const CONFIG = { USE_MOCK: localStorage.getItem('learnpath-mode') !== 'live', API_BASE: '/api' };
+const CONFIG = {
+  USE_MOCK: localStorage.getItem('learnpath-mode') !== 'live', API_BASE: '/api',
+  // Google sign-in: paste your OAuth "Web application" Client ID here (Google Cloud Console > APIs & Services > Credentials).
+  // Leave empty to use the demo dialog in Mock mode. A Client ID is public, it is safe to commit; never commit the client SECRET.
+  GOOGLE_CLIENT_ID: '387986591955-kkcc9gpidmqiam05l6ash61vfl5sh27v.apps.googleusercontent.com'
+};
 const ICON = { Programming: '💻', Data: '📊', Design: '🎨', Business: '💼', Languages: '🌍', Marketing: '📣' };
 const CATS = Object.keys(ICON); // seed categories only; the real list comes from GET /categories
 const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s);
@@ -35,6 +40,62 @@ function setSession(user, token) {
   localStorage.setItem('user', JSON.stringify(user)); localStorage.setItem('token', token);
 }
 function logout() { localStorage.removeItem('user'); localStorage.removeItem('token'); flash('Logged out', 'info'); location.href = 'index.html'; }
+/* ===== Google sign-in =====
+   Real Google: put your OAuth Web Client ID in CONFIG.GOOGLE_CLIENT_ID at the top of this file. Google gives the page a signed ID token (JWT)
+   which is POSTed to /auth/google. The real server MUST verify that token with Google; decoding it in the browser is only
+   done by the Mock API below. Without a Client ID, Mock mode shows a demo dialog that simulates the Google step. */
+const goNext = () => { const n = new URLSearchParams(location.search).get('next'); location.href = n && /^[\w.\-]+\.html(\?[\w=&%.\-]*)?$/.test(n) ? n : 'index.html'; };
+function decodeJwt(t) {
+  const b = (String(t).split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(decodeURIComponent(atob(b + '='.repeat((4 - b.length % 4) % 4)).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
+}
+async function googleSignIn(credential) {
+  try {
+    const r = await api('/auth/google', 'POST', { credential });
+    setSession(r.user, r.token); flash(r.created ? 'Welcome to SkillTrail! Your account was created.' : 'Signed in with Google'); goNext();
+  } catch (x) { toast(x.message || 'Google sign-in failed', 'danger'); }
+}
+const GOOGLE_G = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+const loadGsi = () => new Promise((ok, no) => {
+  if (window.google?.accounts?.id) return ok();
+  const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client?hl=en'; s.async = true;
+  s.onload = ok; s.onerror = () => no(new Error('Could not load Google sign-in')); document.head.append(s);
+});
+const fakeGoogleToken = ({ name, email }) => {
+  const enc = o => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return enc({ alg: 'none' }) + '.' + enc({ iss: 'https://accounts.google.com', aud: 'demo', sub: 'demo-' + email, email, email_verified: true, name, picture: '', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.demo';
+};
+function demoGoogleDialog() {
+  let el = document.getElementById('gDemo');
+  if (!el) {
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal fade" id="gDemo" tabindex="-1"><div class="modal-dialog modal-dialog-centered" style="max-width:420px"><div class="modal-content glass"><form class="modal-body p-4" id="gDemoForm">
+      <div class="d-flex align-items-center gap-2 mb-2">${GOOGLE_G}<h5 class="m-0">Sign in with Google</h5></div>
+      <p class="small text-secondary">Demo mode: no Google Client ID is set (<code>CONFIG.GOOGLE_CLIENT_ID</code> in <code>js/common.js</code>), so this dialog stands in for the Google account step.</p>
+      <input name="name" class="form-control mb-2" placeholder="Name on the Google account" required>
+      <input name="email" type="email" class="form-control mb-3" placeholder="name@gmail.com" required>
+      <div class="d-flex gap-2"><button type="button" class="btn btn-outline-light flex-fill" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary flex-fill">Continue</button></div></form></div></div></div>`);
+    el = document.getElementById('gDemo');
+    el.querySelector('form').onsubmit = e => { e.preventDefault(); const f = formData(e.target); bootstrap.Modal.getOrCreateInstance(el).hide(); googleSignIn(fakeGoogleToken(f)); };
+  }
+  bootstrap.Modal.getOrCreateInstance(el).show();
+}
+async function initGoogleButton(box) {
+  if (!box) return;
+  const id = CONFIG.GOOGLE_CLIENT_ID;
+  const plain = () => {
+    box.innerHTML = `<button type="button" class="btn btn-outline-light w-100 google-btn">${GOOGLE_G} Continue with Google</button>`;
+    box.firstChild.onclick = () => id ? toast('Google sign-in could not be loaded. Check your connection.', 'danger')
+      : CONFIG.USE_MOCK ? demoGoogleDialog() : toast('Google sign-in is not configured. Set CONFIG.GOOGLE_CLIENT_ID in js/common.js.', 'warning');
+  };
+  if (!id) return plain();
+  try {
+    await loadGsi();
+    const draw = () => { box.innerHTML = ''; google.accounts.id.renderButton(box, { type: 'standard', theme: currentTheme() === 'light' ? 'outline' : 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', width: Math.min(400, box.clientWidth || 360) }); };
+    google.accounts.id.initialize({ client_id: id, callback: r => googleSignIn(r.credential) });
+    draw(); document.addEventListener('themechange', draw);
+  } catch (e) { plain(); }
+}
+
 function guard(...roles) {
   if (!state.user) { location.href = 'login.html?next=' + encodeURIComponent(location.pathname.split('/').pop() + location.search); return false; }
   if (roles.length && !roles.includes(state.user.role)) { flash('You do not have access to that page', 'danger'); location.href = 'index.html'; return false; }
@@ -412,9 +473,19 @@ function mock(method, path, body) {
       db.users.push({ userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false }); return null;
     }
     if (R('POST', /^\/auth\/login$/)) {
-      const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password === body.password);
+      const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password && u.password === body.password);
       if (!u) err(401, 'Invalid email or password'); if (u.locked) err(403, 'This account has been locked. Contact an admin.');
       return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role } };
+    }
+    if (R('POST', /^\/auth\/google$/)) {
+      let g; try { g = decodeJwt(body.credential); } catch { err(401, 'Invalid Google sign-in token'); }
+      need(g.email && g.email_verified !== false, 'Your Google email address is not verified');
+      if (CONFIG.GOOGLE_CLIENT_ID && g.aud !== CONFIG.GOOGLE_CLIENT_ID) err(401, 'This Google token was issued for a different app');
+      if (g.exp && g.exp * 1000 < Date.now()) err(401, 'Google sign-in expired. Please try again.');
+      let u = db.users.find(x => x.email.toLowerCase() === g.email.toLowerCase()), created = false;
+      if (u && u.locked) err(403, 'This account has been locked. Contact an admin.');
+      if (!u) { u = { userId: Date.now(), fullName: (g.name || g.email.split('@')[0]).trim(), email: g.email, password: null, role: 'STUDENT', locked: false, provider: 'GOOGLE', avatar: g.picture || '' }; db.users.push(u); created = true; }
+      return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || g.picture || '' } };
     }
     if (R('GET', /^\/categories$/)) return db.categories;
     if (R('GET', /^\/courses$/)) return db.courses.filter(c => c.status === 'PUBLISHED').map(view);
@@ -588,7 +659,9 @@ function card(c, mine) {
       <div class="dropdown-menu dropdown-menu-end p-0 glass" id="bellList" style="width:320px;max-height:380px;overflow:auto"><div class="notif text-secondary">No notifications</div></div></div>
      <a href="profile.html" class="user-chip text-reset text-decoration-none me-2${on('profile.html')}">${avatar ? `<img class="nav-avatar" src="${avatar}" alt="Profile">` : `<span class="nav-avatar nav-avatar-fallback">${esc((u.fullName || 'U').split(' ').map(x => x[0]).slice(0, 2).join(''))}</span>`}<span>Hi, ${esc(u.fullName)}</span></a><button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>`
       : `<a href="login.html" class="btn btn-outline-light btn-sm me-2">Login</a><a href="signup.html" class="btn btn-primary btn-sm">Sign up</a>`}
+   <button class="btn btn-sm theme-toggle ms-lg-2" id="themeToggle" type="button"></button>
    <button class="btn btn-sm mode-toggle ms-lg-2" id="modeToggle" type="button" title="Switch data source"><i class="bi bi-database"></i> ${modeLabel}</button></div></div></nav>`);
+  const themeButton = document.getElementById('themeToggle'); if (themeButton) { themeButton.addEventListener('click', toggleTheme); paintThemeToggle(); }
   const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const live = localStorage.getItem('learnpath-mode') === 'live'; localStorage.setItem('learnpath-mode', live ? 'mock' : 'live'); toast(live ? 'Mock data mode enabled' : 'Live API mode enabled'); setTimeout(() => location.reload(), 250); });
   document.body.insertAdjacentHTML('beforeend', `<footer class="glass text-center py-4 mt-auto">
    <div class="fs-5 fw-bold mb-2"><i class="bi bi-mortarboard-fill"></i> SkillTrail</div>
