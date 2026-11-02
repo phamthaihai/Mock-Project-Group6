@@ -6,7 +6,8 @@
 
 ## Run:
 - 1st time or after opening vscode:
-  '$env:JAVA_HOME = "D:\JDK21"
+- move path to skilltrail-frontend
+- '$env:JAVA_HOME = "D:\JDK21"
   $env:Path = "$env:JAVA_HOME\bin;$env:Path"
   $env:DB_USERNAME = "username"
   $env:SPRING_DATASOURCE_PASSWORD = "password"
