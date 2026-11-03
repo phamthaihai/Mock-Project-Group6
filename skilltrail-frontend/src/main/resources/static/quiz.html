@@ -33,12 +33,11 @@
       const answered = q => (answers[q.questionId] || []).length > 0;
       const fmtTime = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 
-      /* the item that follows this quiz: next quiz in the section, else the first lesson of the next section */
+      /* what follows a passed quiz: the first lesson of the next section ("Next lesson"), or "Finish" when this was the last quiz */
       function nextStep(res) {
         const sections = c.sections || [], si = sections.findIndex(s => s.quiz && s.quiz.quizId === +qz.quizId);
-        if (res?.courseCompleted) return { href: 'congrats.html?id=' + courseId, label: 'Get my certificate', icon: 'bi-award-fill' };
-        if (sections[si + 1]) return { href: 'learn.html?id=' + courseId + '&k=' + (si + 2) + '.1', label: 'Next section: ' + sections[si + 1].title, icon: 'bi-chevron-right' };
-        return { href: 'course.html?id=' + courseId, label: 'Back to course', icon: 'bi-arrow-left' };
+        for (let i = si + 1; i < sections.length; i++) if ((sections[i].lessons || []).length) return { href: 'learn.html?id=' + courseId + '&k=' + (i + 1) + '.1', label: 'Next lesson', icon: 'bi-chevron-right' };
+        return { href: res?.courseCompleted ? 'congrats.html?id=' + courseId : 'course.html?id=' + courseId, label: 'Finish', icon: 'bi-flag-fill' };
       }
       const crumb = () => '<a href="learn.html?id=' + courseId + '&k=' + qz.sectionIndex + '.1" class="text-white-50 small"><i class="bi bi-arrow-left"></i> ' + esc(qz.courseTitle) + ' · Section ' + qz.sectionIndex + '</a>';
 

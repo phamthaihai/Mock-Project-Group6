@@ -9,7 +9,7 @@ The front-end mock (`js/common.js`, function `mock`) returns exactly these shape
 | POST | /auth/register | public | `{fullName,email,password}` -> new STUDENT. 400 invalid, 409 email exists |
 | POST | /auth/login | public | `{email,password}` -> `{token, user:{userId,fullName,email,role}}`. 401 wrong, 403 locked |
 | GET / PUT | /users/me | any | `{userId,fullName,email,role,locked}` / body `{fullName}` |
-| PUT | /users/me/password | any | `{currentPassword,newPassword}` 400 if wrong |
+| PUT | /users/me/password | any | `{currentPassword,newPassword}` 400 if wrong. If the account has no password yet (Google sign-up), `currentPassword` is not required; `GET /users/me` should return `hasPassword` (boolean) |
 | GET / POST | /notifications/me, /notifications/read | any | `[{notificationId,message,link,read,createdAt}]`, POST marks all read |
 
 ## Catalog (public)

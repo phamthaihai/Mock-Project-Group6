@@ -30,7 +30,7 @@
                             <p>Hundreds of hours of video lessons in programming, data, design and business, available
                                 anytime on any device.</p>
                             <a href="#courses" class="btn btn-primary btn-lg me-2">Browse Courses</a><a
-                                href="signup.html" class="btn btn-outline-light btn-lg">Join free</a>
+                                href="signup.html" data-cta="signup" class="btn btn-outline-light btn-lg">Join free</a>
                         </div>
                     </div>
                 </div>
@@ -54,7 +54,7 @@
                             <h1>Finish what you start</h1>
                             <p>Tick off lessons as you go, watch your progress grow, and pick up exactly where you left
                                 off.</p>
-                            <a href="signup.html" class="btn btn-primary btn-lg">Start Learning</a>
+                            <a href="signup.html" data-cta="learn" class="btn btn-primary btn-lg">Start Learning</a>
                         </div>
                     </div>
                 </div>
@@ -152,7 +152,7 @@
             <div class="cta">
                 <h2>Ready to learn something new?</h2>
                 <p class="mb-4">Join SkillTrail today. It's free to sign up and takes less than a minute.</p>
-                <a href="signup.html" class="btn btn-lg">Create your account</a>
+                <a href="signup.html" data-cta="signup" class="btn btn-lg">Create your account</a>
             </div>
         </section>
 
@@ -187,6 +187,15 @@
     <script src="js/common.js"></script>
     <script>
         let courses = [], mine = new Set(), cat = 0;
+        /* Logged in: "Start learning" scrolls to the course list; "Join free" / "Create your account" ask before switching accounts.
+           Logged out: the links behave as normal (go to signup.html). */
+        if (state.user) $$('a[data-cta="learn"]').forEach(a => a.setAttribute('href', '#courses'));
+        document.addEventListener('click', async e => {
+            const a = e.target.closest('a[data-cta="signup"]'); if (!a || !state.user) return;
+            e.preventDefault();
+            if (!await confirmBox('You are signed in as ' + (state.user.fullName || state.user.email) + '. Log out and create a new account?', { title: 'Create a new account?', confirmText: 'Log out & sign up', danger: false })) return;
+            localStorage.removeItem('user'); localStorage.removeItem('token'); state.user = null; location.href = 'signup.html';
+        });
         $('#chips').onclick = e => {
             const b = e.target.closest('.chip'); if (!b) return;
             cat = +b.dataset.c; $$('.chip').forEach(x => x.classList.toggle('active', x === b)); render();

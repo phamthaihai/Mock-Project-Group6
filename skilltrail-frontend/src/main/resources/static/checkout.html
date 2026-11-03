@@ -140,7 +140,7 @@
       <table class="table receipt text-start my-4"><tr><td class="text-secondary">Order number</td><td class="text-end">LH-${String(en.enrollmentId).padStart(6, '0')}</td></tr>
        <tr><td class="text-secondary">Course</td><td class="text-end">${esc(c.title)}</td></tr><tr><td class="text-secondary">Method</td><td class="text-end">${LABEL[m]}</td></tr>
        <tr><td class="text-secondary">Amount</td><td class="text-end">${m === 'DEMO' ? money(c.price) + ' (not charged)' : money(c.price)}</td></tr><tr><td class="text-secondary">Date</td><td class="text-end">${new Date().toLocaleString()}</td></tr></table>
-      <a href="course.html?id=${id}#content" class="btn btn-primary btn-lg w-100">Start learning</a><a href="profile.html" class="btn btn-outline-light w-100 mt-2">Go to My Learning</a></div></div>`;
+      <a href="course.html?id=${id}#content" class="btn btn-primary btn-lg w-100">Start learning</a><a href="my-courses.html" class="btn btn-outline-light w-100 mt-2">Go to My Learning</a></div></div>`;
             window.scrollTo(0, 0);
         }
 

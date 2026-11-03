@@ -215,16 +215,54 @@ const sugCard = (c, why) => `<div class="col-sm-6 col-lg-4"><a href="course.html
   <span class="badge text-bg-dark">${esc(why)}</span> <span class="float-end fw-bold">${money(c.price)}</span></div></div></a></div>`;
 const certDate = e => new Date(e.completedAt || Date.now()).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
 const certId = e => 'ST-' + String(e.courseId).padStart(3, '0') + '-' + String(state.user?.userId ?? 0).slice(-4).padStart(4, '0');
-const certificateHtml = e => `<div class="cert"><div class="cert-in">
+const certificateHtml = e => `<div class="cert-wrap"><div class="cert"><div class="cert-in">
   <div class="cert-brand"><i class="bi bi-mortarboard-fill"></i> Skill<span>Trail</span></div>
-  <div class="cert-small">CERTIFICATE OF COMPLETION</div><div class="cert-line">This certifies that</div>
+  <div class="cert-mid"><div class="cert-small">CERTIFICATE OF COMPLETION</div><div class="cert-line">This certifies that</div>
   <div class="cert-name">${esc(e.studentName || state.user?.fullName || 'Learner')}</div>
-  <div class="cert-line">has successfully completed the course</div><div class="cert-course">${esc(e.title)}</div>
-  <div class="cert-foot"><div><b>${certDate(e)}</b><small>Date</small></div><div><b>${certId(e)}</b><small>Certificate ID</small></div></div></div></div>`;
+  <div class="cert-line">has successfully completed the course</div><div class="cert-course">${esc(e.title)}</div></div>
+  <div class="cert-foot"><div><b>${certDate(e)}</b><small>Date</small></div><div><b>${certId(e)}</b><small>Certificate ID</small></div></div></div></div></div>`;
+// Print / Save as PDF: opens a blank A4-landscape page that the certificate fills edge to edge
 function printCertificate(e) {
   const w = open('', '_blank'); if (!w) { toast('Allow pop-ups to print your certificate', 'warning'); return; }
-  w.document.write('<!doctype html><title>Certificate - ' + esc(e.title) + '</title><style>' + CERT_CSS + 'body{margin:0;padding:24px;background:#fff;font-family:Poppins,Arial,sans-serif}@page{size:landscape;margin:12mm}</style>' + certificateHtml(e) + '<script>onload=()=>setTimeout(()=>print(),300)<\/script>');
+  w.document.write('<!doctype html><title>Certificate - ' + esc(e.title) + '</title><style>' + CERT_CSS + '@page{size:A4 landscape;margin:0}html,body{margin:0;height:100%;background:#fff;font-family:Poppins,Arial,sans-serif}.cert-wrap{width:100vw;height:100vh}.cert{height:100%;aspect-ratio:auto;border-radius:0}.cert-brand i{display:none}</style>' + certificateHtml(e) + '<script>onload=()=>setTimeout(()=>print(),300)<\/script>');
   w.document.close();
+}
+// Draws the certificate on a canvas (1754x1240 = A4 landscape @150dpi) so it can be downloaded or copied as a PNG
+async function certificateCanvas(e) {
+  try { await Promise.all([document.fonts.load('800 60px Poppins'), document.fonts.load('600 40px Poppins'), document.fonts.load('400 30px Poppins')]); } catch { }
+  const W = 1754, H = 1240, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d'), F = 'Poppins, Arial, sans-serif';
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
+  const fit = (t, weight, size, max) => { do { g.font = weight + ' ' + size + 'px ' + F; size -= 2; } while (g.measureText(t).width > max && size > 20); };
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.strokeStyle = '#6d5dfc'; g.lineWidth = 12; rr(24, 24, W - 48, H - 48, 40); g.stroke();
+  g.strokeStyle = '#c7c2ff'; g.lineWidth = 3; rr(64, 64, W - 128, H - 128, 28); g.stroke();
+  g.font = '800 76px ' + F; const a = 'Skill', b = 'Trail', wa = g.measureText(a).width, wb = g.measureText(b).width, x0 = W / 2 - (wa + wb) / 2;
+  g.textAlign = 'left'; g.fillStyle = '#1a1040'; g.fillText(a, x0, 230); g.fillStyle = '#6d5dfc'; g.fillText(b, x0 + wa, 230); g.textAlign = 'center';
+  g.fillStyle = '#6d5dfc'; g.font = '700 34px ' + F; if ('letterSpacing' in g) g.letterSpacing = '10px'; g.fillText('CERTIFICATE OF COMPLETION', W / 2, 370); if ('letterSpacing' in g) g.letterSpacing = '0px';
+  g.fillStyle = '#555'; g.font = '400 38px ' + F; g.fillText('This certifies that', W / 2, 470);
+  const name = e.studentName || state.user?.fullName || 'Learner'; g.fillStyle = '#1a1040'; fit(name, 800, 130, 1300); g.fillText(name, W / 2, 620);
+  const nw = Math.min(1300, g.measureText(name).width + 120); g.fillStyle = '#6d5dfc'; g.fillRect(W / 2 - nw / 2, 645, nw, 5);
+  g.fillStyle = '#555'; g.font = '400 38px ' + F; g.fillText('has successfully completed the course', W / 2, 740);
+  g.fillStyle = '#1a1040'; fit(e.title, 700, 84, 1400); g.fillText(e.title, W / 2, 860);
+  [[certDate(e), 'Date', 470], [certId(e), 'Certificate ID', W - 470]].forEach(([v, l, x]) => { g.fillStyle = '#1a1040'; g.font = '700 38px ' + F; g.fillText(v, x, 1040); g.fillStyle = '#777'; g.font = '400 30px ' + F; g.fillText(l, x, 1090); });
+  return cv;
+}
+const canvasBlob = cv => new Promise(ok => cv.toBlob(ok, 'image/png'));
+async function downloadCertificate(e) {
+  try {
+    const blob = await canvasBlob(await certificateCanvas(e)), a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'SkillTrail-Certificate-' + certId(e) + '.png'; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Certificate downloaded');
+  } catch (x) { toast('Could not create the certificate image', 'danger'); }
+}
+async function copyCertificate(e) {
+  try {
+    const blob = await canvasBlob(await certificateCanvas(e));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Certificate image copied to clipboard');
+  } catch (x) {
+    try { await navigator.clipboard.writeText(`${e.studentName || state.user?.fullName} completed "${e.title}" on ${certDate(e)}. Certificate ID: ${certId(e)}`); toast('Image copy is not supported here, so the certificate details were copied as text', 'info'); }
+    catch { toast('Copy is not available in this browser', 'warning'); }
+  }
 }
 function confetti() {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -232,10 +270,15 @@ function confetti() {
   for (let i = 0; i < 80; i++) { const b = document.createElement('i'); b.style.cssText = `left:${Math.random() * 100}%;background:${colors[i % 5]};animation-delay:${Math.random() * 1.2}s;animation-duration:${2.4 + Math.random() * 2}s;transform:rotate(${Math.random() * 360}deg)`; box.append(b); }
   document.body.append(box); setTimeout(() => box.remove(), 5500);
 }
-const CERT_CSS = `.cert{border:3px solid #6d5dfc;border-radius:18px;padding:10px;background:#fff;color:#1a1040}.cert-in{border:1px solid #c7c2ff;border-radius:12px;padding:2.2rem 1.5rem;text-align:center}
-.cert-brand{font-weight:800;font-size:1.3rem}.cert-brand span{color:#6d5dfc}.cert-small{letter-spacing:.3em;font-size:.8rem;font-weight:700;color:#6d5dfc;margin:1.2rem 0 1rem}.cert-line{color:#555}
-.cert-name{font-size:2.3rem;font-weight:800;margin:.4rem 0;border-bottom:2px solid #6d5dfc;display:inline-block;padding:0 1.5rem}.cert-course{font-size:1.5rem;font-weight:700;margin:.5rem 0 1.5rem}
-.cert-foot{display:flex;justify-content:space-around;margin-top:1.5rem}.cert-foot b{display:block}.cert-foot small{color:#777}`;
+const CERT_CSS = `.cert-wrap{container-type:inline-size;width:100%}
+.cert{box-sizing:border-box;width:100%;aspect-ratio:297/210;border:.25em solid #6d5dfc;border-radius:.9em;padding:.5em;background:#fff;color:#1a1040;font-size:1.9cqw;font-family:Poppins,Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.cert-in{box-sizing:border-box;height:100%;border:1px solid #c7c2ff;border-radius:.6em;padding:2em 2.5em;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center}
+.cert-brand{font-weight:800;font-size:2.2em;line-height:1.2}.cert-brand span{color:#6d5dfc}
+.cert-mid{display:flex;flex-direction:column;align-items:center;gap:.5em;max-width:100%}
+.cert-small{letter-spacing:.3em;font-size:.9em;font-weight:700;color:#6d5dfc}.cert-line{color:#555;font-size:1.1em}
+.cert-name{font-size:3.4em;font-weight:800;line-height:1.25;border-bottom:.06em solid #6d5dfc;padding:0 1em;max-width:100%;overflow-wrap:anywhere}
+.cert-course{font-size:2.2em;font-weight:700;line-height:1.25;max-width:100%}
+.cert-foot{display:flex;justify-content:space-around;width:100%}.cert-foot b{display:block;font-size:1.1em}.cert-foot small{color:#777;font-size:.9em}`;
 
 const NAMES = ['Minh Anh Pham', 'Daniel Kim', 'Hoa Nguyen', 'Sofia Alvarez', 'Tuan Le', 'Aisha Khan', 'Lucas Meyer', 'Thao Vo', 'Priyank Shah', 'Linh Dang'];
 const TPL = [
@@ -433,7 +476,7 @@ function mock(method, path, body) {
   const renum = a => a.forEach((x, i) => { x.position = i + 1; });
   const move = (a, x, d) => { const i = a.indexOf(x), j = i + (d < 0 ? -1 : 1); if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; renum(a); };
   const notify = (userId, message, link) => db.notifications.push({ notificationId: ++db.nid, userId, message, link: link || null, read: false, createdAt: now() });
-  const pubUser = ({ password, ...u }) => u;
+  const pubUser = ({ password, ...u }) => ({ ...u, hasPassword: !!password, googleLinked: u.googleLinked ?? u.provider === 'GOOGLE' });
   const rating = id => { const r = db.reviews.filter(x => x.courseId === id); return { rating: r.length ? Math.round(r.reduce((t, x) => t + x.rating, 0) / r.length * 10) / 10 : 0, ratingCount: r.length }; };
   const view = c => {
     const ls = lessonsOf(c), inst = db.users.find(u => u.userId === c.instructorId);
@@ -475,7 +518,7 @@ function mock(method, path, body) {
     if (R('POST', /^\/auth\/login$/)) {
       const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password && u.password === body.password);
       if (!u) err(401, 'Invalid email or password'); if (u.locked) err(403, 'This account has been locked. Contact an admin.');
-      return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role } };
+      return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
     if (R('POST', /^\/auth\/google$/)) {
       let g; try { g = decodeJwt(body.credential); } catch { err(401, 'Invalid Google sign-in token'); }
@@ -484,8 +527,10 @@ function mock(method, path, body) {
       if (g.exp && g.exp * 1000 < Date.now()) err(401, 'Google sign-in expired. Please try again.');
       let u = db.users.find(x => x.email.toLowerCase() === g.email.toLowerCase()), created = false;
       if (u && u.locked) err(403, 'This account has been locked. Contact an admin.');
+      if (u && u.googleLinked === false) err(403, 'Google sign-in is unbound from this account. Log in with your email and password.');
       if (!u) { u = { userId: Date.now(), fullName: (g.name || g.email.split('@')[0]).trim(), email: g.email, password: null, role: 'STUDENT', locked: false, provider: 'GOOGLE', avatar: g.picture || '' }; db.users.push(u); created = true; }
-      return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || g.picture || '' } };
+      u.googleLinked = true; if (!u.avatar && g.picture) u.avatar = g.picture; // same email = same account; the picture is saved on the account so every login method shows it
+      return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
     if (R('GET', /^\/categories$/)) return db.categories;
     if (R('GET', /^\/courses$/)) return db.courses.filter(c => c.status === 'PUBLISHED').map(view);
@@ -503,8 +548,13 @@ function mock(method, path, body) {
     /* ---- any logged-in user ---- */
     if (!me) err(401, 'Please log in first'); if (me.locked) err(403, 'This account has been locked');
     if (R('GET', /^\/users\/me$/)) return pubUser(me);
-    if (R('PUT', /^\/users\/me$/)) { need(body.fullName && body.fullName.trim(), 'Full name is required'); me.fullName = body.fullName.trim(); return pubUser(me); }
-    if (R('PUT', /^\/users\/me\/password$/)) { if (me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; return null; }
+    if (R('PUT', /^\/users\/me$/)) { need(body.fullName && body.fullName.trim(), 'Full name is required'); me.fullName = body.fullName.trim(); if (typeof body.avatar === 'string') me.avatar = body.avatar; return pubUser(me); }
+    if (R('POST', /^\/users\/me\/google\/unbind$/)) {
+      if (!pubUser(me).googleLinked) err(400, 'No Google account is linked');
+      if (!me.password) { need((body?.newPassword || '').length >= 6, 'Set a password (min 6 characters) before unbinding Google'); me.password = body.newPassword; }
+      me.googleLinked = false; if (/^https?:/i.test(me.avatar || '')) me.avatar = ''; return null;
+    }
+    if (R('PUT', /^\/users\/me\/password$/)) { if (me.password && me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; return null; }
     if (R('GET', /^\/notifications\/me$/)) return db.notifications.filter(n => n.userId === uid).sort((a, b) => b.notificationId - a.notificationId).slice(0, 20);
     if (R('POST', /^\/notifications\/read$/)) { db.notifications.forEach(n => { if (n.userId === uid) n.read = true; }); return null; }
     if (R('GET', /^\/enrollments\/me$/)) return db.enrollments.filter(e => e.userId === uid).map(e => {
@@ -705,6 +755,20 @@ function card(c, mine) {
     tick();
     arrival = { cancel };
   };
+  // Home page: highlight Home / Courses / About / Contact according to the section currently on screen
+  if (/\/(index\.html)?$/.test(location.pathname)) {
+    const links = [...document.querySelectorAll('.navbar-nav .nav-link')], by = h => links.find(a => a.getAttribute('href') === h);
+    const spy = () => {
+      const y = NAV_OFFSET + 80, top = id => { const s = document.getElementById(id); return s ? s.getBoundingClientRect().top : Infinity; };
+      let act = by('index.html');
+      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) act = by('index.html#contact');
+      else for (const id of ['contact', 'about', 'courses']) if (top(id) <= y) { act = by('index.html#' + id); break; }
+      links.forEach(a => a.classList.toggle('active', a === act));
+    };
+    addEventListener('scroll', spy, { passive: true }); addEventListener('resize', spy); addEventListener('load', spy);
+    if (window.ResizeObserver) new ResizeObserver(spy).observe(document.body);
+    spy();
+  }
   glideOnArrival();
   addEventListener('pageshow', e => { if (e.persisted) glideOnArrival(); });
 
