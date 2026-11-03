@@ -9,6 +9,41 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="css/style.css" rel="stylesheet">
   <link href="css/theme.css" rel="stylesheet">
+  <style>
+    .gl-warn {
+      padding: 14px;
+      border: 1px solid #f5a623;
+      border-radius: 12px;
+      background: rgba(245, 166, 35, 0.08);
+      color: #f5a623;
+    }
+
+    .gl-hold {
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none;
+    }
+
+    .gl-hold-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 0;
+      background: rgba(220, 53, 69, 0.5);
+      transition: width 0s;
+    }
+
+    .gl-hold.holding .gl-hold-fill {
+      width: 100%;
+      transition: width 1.5s linear;
+    }
+
+    .gl-hold-label {
+      position: relative;
+    }
+  </style>
   <title>SkillTrail - Profile</title>
 </head>
 
@@ -34,7 +69,7 @@
         </form>
       </div>
       <div class="col-md-6">
-        <form id="gl" class="glass p-4 h-100 d-none">
+        <form id="gl" class="glass p-4 h-100 d-none" novalidate>
           <h4 class="mb-3">Linked Google account</h4>
           <div class="d-flex align-items-center flex-wrap gap-2 mb-3"><span id="glIcon"></span><span id="glEmail" class="fw-semibold"></span><span class="badge text-bg-success">Linked</span></div>
           <p class="small text-secondary">You can sign in with Google. Unbinding removes Google sign-in from this account; you will log in with your email and password instead.</p>
@@ -43,7 +78,18 @@
             <input name="newPassword" type="password" class="form-control mb-2" placeholder="New password (min 6)" minlength="6">
             <input name="confirm" type="password" class="form-control mb-3" placeholder="Confirm new password">
           </div>
-          <button class="btn btn-outline-danger"><i class="bi bi-link-45deg"></i> Unbind Google</button>
+          <div class="d-flex flex-wrap gap-2">
+            <button type="button" id="glSave" class="btn btn-primary d-none"><i class="bi bi-key"></i> Save password</button>
+            <button class="btn btn-outline-danger"><i class="bi bi-link-45deg"></i> Unbind Google</button>
+          </div>
+          <div id="glWarn" class="gl-warn d-none mt-3">
+            <p class="small mb-2"><strong>You have no password.</strong> If you unbind Google, you will not be able to log in to this account.</p>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+              <button type="button" id="glSetPw" class="btn btn-primary btn-sm">Set a password</button>
+              <button type="button" id="glHold" class="btn btn-outline-danger btn-sm gl-hold"><span class="gl-hold-fill"></span><span class="gl-hold-label">Hold to unbind anyway</span></button>
+              <button type="button" id="glCancel" class="btn btn-link btn-sm text-secondary">Cancel</button>
+            </div>
+          </div>
         </form>
         <form id="pw" class="glass p-4 h-100">
           <h4 class="mb-3" id="pwTitle">Change Password</h4>
@@ -73,16 +119,43 @@
         try { const u = await api('/users/me', 'PUT', { fullName: e.target.fullName.value }); setSession({ ...state.user, fullName: u.fullName }, state.token); flash('Profile updated!'); location.reload(); }
         catch (x) { toast(x.message || 'Update failed', 'danger'); }
       };
-      $('#gl').onsubmit = async e => {
-        e.preventDefault(); const d = formData(e.target);
-        if (!$('#glPw').classList.contains('d-none') && d.newPassword !== d.confirm) return toast('Passwords do not match', 'danger');
-        if (!await confirmBox('Google sign-in will stop working for this account. You will log in with your email and password.', { title: 'Unbind Google?', confirmText: 'Unbind' })) return;
+      const glNoPw = () => !$('#glPw').classList.contains('d-none');
+      const glCheckPw = d => (d.newPassword || '').length < 6 ? 'Password must be at least 6 characters' : d.newPassword !== d.confirm ? 'Passwords do not match' : '';
+      const glUnbind = async (body, msg) => {
         try {
-          await api('/users/me/google/unbind', 'POST', $('#glPw').classList.contains('d-none') ? {} : { newPassword: d.newPassword });
+          await api('/users/me/google/unbind', 'POST', body);
           const u = await api('/users/me'), { avatar, ...rest } = state.user; setSession(u.avatar ? { ...rest, avatar: u.avatar } : rest, state.token);
-          flash('Google account unbound. Log in with your email and password from now on.'); location.reload();
+          flash(msg); location.reload();
         } catch (x) { toast(x.message || 'Could not unbind Google', 'danger'); }
       };
+      $('#gl').onsubmit = async e => {
+        e.preventDefault(); const d = formData(e.target);
+        if (glNoPw()) {
+          if (!d.newPassword && !d.confirm) return $('#glWarn').classList.remove('d-none');
+          const bad = glCheckPw(d); if (bad) return toast(bad, 'danger');
+        }
+        if (!await confirmBox('Google sign-in will stop working for this account. You will log in with your email and password.', { title: 'Unbind Google?', confirmText: 'Unbind' })) return;
+        await glUnbind(glNoPw() ? { newPassword: d.newPassword } : {}, 'Google account unbound. Log in with your email and password from now on.');
+      };
+      $('#glSave').onclick = async () => {
+        const d = formData($('#gl')), bad = glCheckPw(d); if (bad) return toast(bad, 'danger');
+        try { await api('/users/me/password', 'PUT', { newPassword: d.newPassword }); flash('Password set! You can now log in with your email too.'); location.reload(); }
+        catch (x) { toast(x.message || 'Could not save password', 'danger'); }
+      };
+      $('#glSetPw').onclick = () => { $('#glWarn').classList.add('d-none'); $('#gl').newPassword.focus(); };
+      $('#glCancel').onclick = () => $('#glWarn').classList.add('d-none');
+      (() => {
+        const btn = $('#glHold'); let timer = null;
+        const stop = () => { clearTimeout(timer); timer = null; btn.classList.remove('holding'); };
+        const start = e => {
+          if (e.repeat || timer) return; e.preventDefault(); btn.classList.add('holding');
+          timer = setTimeout(() => { stop(); glUnbind({ force: true }, 'Google account unbound. This account has no password, so you can no longer log in to it.'); }, 1500);
+        };
+        btn.addEventListener('pointerdown', start);
+        ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, stop));
+        btn.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') start(e); });
+        btn.addEventListener('keyup', stop); btn.addEventListener('blur', stop);
+      })();
       $('#pw').onsubmit = async e => {
         e.preventDefault(); const d = formData(e.target);
         if (d.newPassword !== d.confirm) return toast('Passwords do not match', 'danger');
@@ -90,7 +163,7 @@
         catch (x) { toast(x.message || 'Update failed', 'danger'); }
       };
       (async () => {
-        try { const u = await api('/users/me'); $('#info').elements.fullName.value = u.fullName || ''; $('#info').elements.email.value = u.email || ''; if (u.googleLinked) { $('#pw').classList.add('d-none'); $('#gl').classList.remove('d-none'); $('#glIcon').innerHTML = GOOGLE_G; $('#glEmail').textContent = u.email || ''; if (u.hasPassword === false) { $('#glPw').classList.remove('d-none'); $('#gl').newPassword.required = true; $('#gl').confirm.required = true; } if (u.avatar && u.avatar !== state.user.avatar) { setSession({ ...state.user, avatar: u.avatar }, state.token); paintAvatar(); } }
+        try { const u = await api('/users/me'); $('#info').elements.fullName.value = u.fullName || ''; $('#info').elements.email.value = u.email || ''; if (u.googleLinked) { $('#pw').classList.add('d-none'); $('#gl').classList.remove('d-none'); $('#glIcon').innerHTML = GOOGLE_G; $('#glEmail').textContent = u.email || ''; if (u.hasPassword === false) { $('#glPw').classList.remove('d-none'); $('#glSave').classList.remove('d-none'); } if (u.avatar && u.avatar !== state.user.avatar) { setSession({ ...state.user, avatar: u.avatar }, state.token); paintAvatar(); } }
         else if (u.hasPassword === false) { noPw = true; $('#pwTitle').textContent = 'Set a Password'; $('#pwBtn').textContent = 'Set password'; $('#pwNote').classList.remove('d-none'); const cp = $('#curPw'); cp.required = false; cp.classList.add('d-none'); } const roleEl = $('#role'); if (roleEl) roleEl.textContent = u.role || ''; }
         catch (x) { toast(x.message || 'Failed to load profile', 'danger'); }
       })();

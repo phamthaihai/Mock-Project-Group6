@@ -551,7 +551,7 @@ function mock(method, path, body) {
     if (R('PUT', /^\/users\/me$/)) { need(body.fullName && body.fullName.trim(), 'Full name is required'); me.fullName = body.fullName.trim(); if (typeof body.avatar === 'string') me.avatar = body.avatar; return pubUser(me); }
     if (R('POST', /^\/users\/me\/google\/unbind$/)) {
       if (!pubUser(me).googleLinked) err(400, 'No Google account is linked');
-      if (!me.password) { need((body?.newPassword || '').length >= 6, 'Set a password (min 6 characters) before unbinding Google'); me.password = body.newPassword; }
+      if (!me.password) { if (body?.newPassword) { need(body.newPassword.length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; } else need(body?.force === true, 'Set a password (min 6 characters) before unbinding Google'); }
       me.googleLinked = false; if (/^https?:/i.test(me.avatar || '')) me.avatar = ''; return null;
     }
     if (R('PUT', /^\/users\/me\/password$/)) { if (me.password && me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; return null; }
