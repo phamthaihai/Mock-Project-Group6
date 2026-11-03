@@ -5,6 +5,7 @@
   
 
 ## Run:
+- Run MSSQL (to change)
 - 1st time or after opening vscode:
 - move path to skilltrail-frontend
 - '$env:JAVA_HOME = "D:\JDK21"
