@@ -11,7 +11,10 @@ const $ = s => document.querySelector(s), $$ = s => document.querySelectorAll(s)
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmt = d => new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 const formData = f => Object.fromEntries(new FormData(f));
-const state = { user: JSON.parse(localStorage.getItem('user') || 'null'), token: localStorage.getItem('token') };
+// Remember me: a remembered login lives in localStorage (survives closing the browser); otherwise in sessionStorage (cleared when the tab/browser closes)
+const stored = k => sessionStorage.getItem(k) ?? localStorage.getItem(k);
+const state = { user: JSON.parse(stored('user') || 'null'), token: stored('token') };
+if (state.user?.role === 'INSTRUCTOR') { [localStorage, sessionStorage].forEach(s => { s.removeItem('user'); s.removeItem('token'); }); state.user = null; state.token = null; } // the instructor role no longer exists: drop any session saved before it was removed
 
 /* ===== popups ===== */
 const TOAST = { success: ['check-circle-fill', 'Success'], danger: ['x-circle-fill', 'Error'], warning: ['exclamation-triangle-fill', 'Heads up'], info: ['info-circle-fill', 'Notice'] };
@@ -35,11 +38,13 @@ function confirmBox(message, { title = 'Are you sure?', confirmText = 'Confirm',
 const flash = (msg, type = 'success') => sessionStorage.setItem('flash', JSON.stringify([msg, type])); // shown on the next page
 
 /* ===== session ===== */
-function setSession(user, token) {
+function setSession(user, token, remember) { // remember omitted = keep the session wherever it already lives (new sessions are remembered)
+  const keep = remember ?? sessionStorage.getItem('user') === null, [on, off] = keep ? [localStorage, sessionStorage] : [sessionStorage, localStorage];
   state.user = user; state.token = token;
-  localStorage.setItem('user', JSON.stringify(user)); localStorage.setItem('token', token);
+  on.setItem('user', JSON.stringify(user)); on.setItem('token', token); off.removeItem('user'); off.removeItem('token');
 }
-function logout() { localStorage.removeItem('user'); localStorage.removeItem('token'); flash('Logged out', 'info'); location.href = 'index.html'; }
+function clearSession() { [localStorage, sessionStorage].forEach(s => { s.removeItem('user'); s.removeItem('token'); }); state.user = null; state.token = null; }
+function logout() { clearSession(); flash('Logged out', 'info'); location.href = 'index.html'; }
 /* ===== Google sign-in =====
    Real Google: put your OAuth Web Client ID in CONFIG.GOOGLE_CLIENT_ID at the top of this file. Google gives the page a signed ID token (JWT)
    which is POSTed to /auth/google. The real server MUST verify that token with Google; decoding it in the browser is only
@@ -184,11 +189,9 @@ const UI_CSS = `
 .cf-icon { width: 64px; height: 64px; margin: 0 auto 1rem; display: grid; place-items: center; border-radius: 50%; font-size: 1.8rem; }
 .cf-icon.danger { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 .cf-icon.primary { background: rgba(109, 93, 252, 0.15); color: #a5b4fc; }
-.admin-pill, .instr-pill { display: inline-block; margin-left: 0.4rem; padding: 0.15rem 0.6rem; border-radius: 50rem; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; color: #1a1040; }
+.admin-pill { display: inline-block; margin-left: 0.4rem; padding: 0.15rem 0.6rem; border-radius: 50rem; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; color: #1a1040; }
 .admin-pill { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
-.instr-pill { background: linear-gradient(135deg, #22d3ee, #67e8f9); }
 .admin-nav { border-bottom: 2px solid #f59e0b !important; }
-.instr-nav { border-bottom: 2px solid #22d3ee !important; }
 .player { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; aspect-ratio: 16 / 9; border-radius: 14px; background: linear-gradient(135deg, #1a1040, #2a3358); color: #cbd5ff; }
 .player i { font-size: 3.5rem; color: var(--brand2); }
 .lesson.active { background: rgba(109, 93, 252, 0.22); color: #fff; }
@@ -297,10 +300,12 @@ const TPL = [
 function seed(oldUsers) {
   let seedN = 11; const rnd = () => (seedN = seedN * 16807 % 2147483647) / 2147483647;
   const shuffle = a => a.map(v => [rnd(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
-  const users = (oldUsers || []).map(u => ({ ...u, role: u.role === 'USER' ? 'STUDENT' : u.role, locked: !!u.locked }));
+  const users = (oldUsers || []).map(u => u.role === 'INSTRUCTOR' ? { ...u, role: 'STUDENT', author: true, locked: true } : ({ ...u, role: u.role === 'USER' ? 'STUDENT' : u.role, locked: !!u.locked }));
   let maxId = Math.max(100, ...users.map(u => u.userId));
   const account = (email, fullName, role, pw = '123456') => { let u = users.find(x => x.email === email); if (!u) users.push(u = { userId: ++maxId, fullName, email, password: pw, role, locked: false }); return u; };
-  const admin = account('admin@learnpath.com', 'Admin', 'ADMIN', 'admin123'), student = account('student@learnpath.com', 'Demo Student', 'STUDENT');
+  // course authors: the teacher shown on a course. They are profiles only (no login, no role), not accounts people sign in with
+  const author = (email, fullName) => { const u = account(email, fullName, 'STUDENT'); u.author = true; u.locked = true; return u; };
+  const admin = account('admin@learnpath.com', 'Admin', 'ADMIN', 'admin123');
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const raw = [
     {
@@ -432,14 +437,14 @@ function seed(oldUsers) {
   };
   const sections = (cur, title) => { let n = 0; const s = cur.map((x, i) => { const [st, ls] = x.split('::'); return { sectionId: ++sid, title: st, position: i + 1, quiz: null, lessons: ls.split(';').map(l => { const [t, m] = l.split('|'); return lesson(t, +m, n++, title); }) }; }); s[0].lessons[0].preview = true; return s; };
   const courses = raw.map((r, i) => {
-    const inst = account(r.instructor === 'Nguyen Van An' ? 'instructor@learnpath.com' : slug(r.instructor).replace(/-/g, '.') + '@learnpath.com', r.instructor, 'INSTRUCTOR'), secs = sections(r.cur, r.title);
+    const inst = author(r.instructor === 'Nguyen Van An' ? 'instructor@learnpath.com' : slug(r.instructor).replace(/-/g, '.') + '@learnpath.com', r.instructor), secs = sections(r.cur, r.title);
     secs[0].quiz = quiz(secs[0]);
     return {
       courseId: i + 1, title: r.title, description: r.description, categoryId: CATS.indexOf(r.category) + 1, level: r.level, price: r.price, imageUrl: 'https://loremflickr.com/1200/700/' + r.kw + '?lock=' + (i + 21),
       status: 'PUBLISHED', rejectReason: null, instructorId: inst.userId, language: r.lang, durationHours: r.hours, details: { tagline: r.tagline, learn: r.learn, requirements: r.req, skills: r.skills, instructorBio: r.bio }, sections: secs
     };
   });
-  const demo = account('instructor@learnpath.com', 'Nguyen Van An', 'INSTRUCTOR');
+  const demo = author('instructor@learnpath.com', 'Nguyen Van An');
   [['Spring Security in Practice', 'DRAFT', null, 0], ['REST API Design Patterns', 'PENDING', null, 2], ['Intro to Cloud Computing', 'REJECTED', 'Please add more lessons and a clearer course description.', 2]].forEach((x, k) => courses.push({
     courseId: 16 + k, title: x[0], description: 'Work in progress course created by the demo instructor.', categoryId: 1, level: 'Intermediate', price: k ? 0 : 490000, imageUrl: null,
     status: x[1], rejectReason: x[2], instructorId: demo.userId, language: 'English', details: {}, sections: [{ sectionId: ++sid, title: 'Getting started', position: 1, quiz: null, lessons: x[3] ? [lesson('Welcome', 8, 0, x[0]), lesson('Core concepts', 15, 1, x[0])] : [] }]
@@ -451,7 +456,6 @@ function seed(oldUsers) {
     comment: t.t({ instructor: r.instructor, title: r.title }), createdAt: isoLocal(new Date(Date.now() - (3 + Math.floor(rnd() * 120)) * 864e5))
   })));
   const at = isoLocal(new Date()), notifications = [
-    { notificationId: 1, userId: student.userId, message: 'Welcome to SkillTrail! Browse the catalog and enroll in your first course.', link: 'index.html#courses', read: false, createdAt: at },
     { notificationId: 2, userId: demo.userId, message: 'Your course "Intro to Cloud Computing" was rejected: Please add more lessons and a clearer course description.', link: 'my-courses.html', read: false, createdAt: at },
     { notificationId: 3, userId: admin.userId, message: '"REST API Design Patterns" is waiting for approval', link: 'index.html#courses', read: false, createdAt: at }];
   return { users, categories, courses, enrollments, progress: [], attempts: [], reviews, notifications, eid, aid: 0, rid, nid: 3, sid, lid, qid, oid, zid };
@@ -462,12 +466,16 @@ function mock(method, path, body) {
   if (!db) { db = seed((JSON.parse(localStorage.getItem('db5') || localStorage.getItem('db4') || 'null') || {}).users); localStorage.setItem('db6', JSON.stringify(db)); }
   const err = (status, message) => { throw { status, message }; };
   const need = (ok, message) => { if (!ok) err(400, message); };
+  { const ds = db.users.find(u => u.email === 'student@learnpath.com'); if (ds) { // the demo student account was removed: drop it and everything it owned
+    const id = ds.userId; db.users = db.users.filter(u => u !== ds); db.enrollments = db.enrollments.filter(e => e.userId !== id); db.progress = db.progress.filter(p => p.userId !== id); db.attempts = db.attempts.filter(a => a.userId !== id);
+    db.reviews = db.reviews.filter(r => r.userId !== id); db.notifications = db.notifications.filter(n => n.userId !== id); if (db.cart) db.cart = db.cart.filter(x => x.userId !== id); if (db.tickets) db.tickets = db.tickets.filter(t => t.userId !== id); } }
+  db.users.forEach(u => { if (u.role === 'INSTRUCTOR') { u.role = 'STUDENT'; u.author = true; u.locked = true; } }); // data saved before the instructor role was removed
   const uid = state.user?.userId, me = uid ? db.users.find(u => u.userId === uid) : null;
-  const admin = me?.role === 'ADMIN', instr = me?.role === 'INSTRUCTOR', now = () => isoLocal(new Date());
+  const admin = me?.role === 'ADMIN', now = () => isoLocal(new Date());
   let m; const R = (mt, re) => mt === method && (m = path.match(re));
   const course = id => db.courses.find(c => c.courseId === +id) || err(404, 'Course not found');
   const own = c => c.instructorId === uid;
-  const manage = c => { if (!(admin || (instr && own(c)))) err(403, 'You can only manage your own courses'); return c; };
+  const manage = c => { if (!admin) err(403, 'You can only manage your own courses'); return c; };
   const enrolledIn = id => !!uid && db.enrollments.some(e => e.courseId === id && e.userId === uid);
   const lessonsOf = c => c.sections.flatMap(s => s.lessons);
   const findSection = id => { for (const c of db.courses) { const s = c.sections.find(s => s.sectionId === +id); if (s) return { c, s }; } err(404, 'Section not found'); };
@@ -476,6 +484,24 @@ function mock(method, path, body) {
   const renum = a => a.forEach((x, i) => { x.position = i + 1; });
   const move = (a, x, d) => { const i = a.indexOf(x), j = i + (d < 0 ? -1 : 1); if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; renum(a); };
   const notify = (userId, message, link) => db.notifications.push({ notificationId: ++db.nid, userId, message, link: link || null, read: false, createdAt: now() });
+  /* activity log (feeds the admin console): type = ACCOUNT | PAYMENT | ENROLLMENT | COMPLETION */
+  const log = (type, action, o = {}) => {
+    const u = o.user, c = o.course;
+    db.logs.push({ logId: ++db.logid, type, action, userId: u?.userId ?? null, userName: u?.fullName ?? '', email: u?.email ?? o.email ?? '', courseId: c?.courseId ?? null, courseTitle: c?.title ?? '',
+      amount: o.amount ?? null, method: o.method ?? null, detail: o.detail || '', actor: o.actor === undefined ? (me?.fullName || '') : o.actor, createdAt: o.at || now() });
+    if (db.logs.length > 1000) db.logs.splice(0, db.logs.length - 1000);
+  };
+  if (!db.users.some(u => u.email === 'admin@gmail.com')) db.users.push({ userId: Math.max(100, ...db.users.map(u => u.userId)) + 1, fullName: 'Admin', email: 'admin@gmail.com', password: '123456', role: 'ADMIN', locked: false }); // same admin as database/schema.sql
+  if (!db.tickets) { db.tickets = []; db.tid = 0; } // support tickets (Help & Support section)
+  if (!db.cart) db.cart = []; // shopping cart: [{userId, courseId, addedAt}]
+  if (!db.logs) {
+    db.logs = []; db.logid = 0; // first run after this update: rebuild enrollment and payment history from existing records
+    db.enrollments.forEach(e => {
+      const u = db.users.find(x => x.userId === e.userId), c = db.courses.find(x => x.courseId === e.courseId); if (!u || !c) return;
+      log('ENROLLMENT', 'ENROLLED', { user: u, course: c, at: e.enrolledAt, actor: u.fullName });
+      if (e.pricePaid > 0) log('PAYMENT', 'PAID', { user: u, course: c, amount: e.pricePaid, method: e.paymentMethod, at: e.enrolledAt, actor: u.fullName });
+    });
+  }
   const pubUser = ({ password, ...u }) => ({ ...u, hasPassword: !!password, googleLinked: u.googleLinked ?? u.provider === 'GOOGLE' });
   const rating = id => { const r = db.reviews.filter(x => x.courseId === id); return { rating: r.length ? Math.round(r.reduce((t, x) => t + x.rating, 0) / r.length * 10) / 10 : 0, ratingCount: r.length }; };
   const view = c => {
@@ -513,11 +539,14 @@ function mock(method, path, body) {
       const { fullName, email, password } = body || {};
       need(fullName && fullName.trim(), 'Full name is required'); need(/^\S+@\S+\.\S+$/.test(email || ''), 'Enter a valid email'); need((password || '').length >= 6, 'Password must be at least 6 characters');
       if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) err(409, 'Email already registered');
-      db.users.push({ userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false }); return null;
+      const nu = { userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false }; db.users.push(nu); log('ACCOUNT', 'REGISTERED', { user: nu, actor: nu.fullName, detail: 'Email sign-up' }); return null;
     }
     if (R('POST', /^\/auth\/login$/)) {
       const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password && u.password === body.password);
-      if (!u) err(401, 'Invalid email or password'); if (u.locked) err(403, 'This account has been locked. Contact an admin.');
+      const save = () => localStorage.setItem('db6', JSON.stringify(db)); // failed attempts are logged too, so save before throwing
+      if (!u) { log('ACCOUNT', 'LOGIN_FAILED', { email: body.email || '', actor: '', detail: 'Wrong email or password' }); save(); err(401, 'Invalid email or password'); }
+      if (u.locked) { log('ACCOUNT', 'LOGIN_BLOCKED', { user: u, actor: u.fullName, detail: 'Account is locked' }); save(); err(403, 'This account has been locked. Contact an admin.'); }
+      log('ACCOUNT', 'LOGIN', { user: u, actor: u.fullName, detail: 'Email and password' });
       return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
     if (R('POST', /^\/auth\/google$/)) {
@@ -530,6 +559,7 @@ function mock(method, path, body) {
       if (u && u.googleLinked === false) err(403, 'Google sign-in is unbound from this account. Log in with your email and password.');
       if (!u) { u = { userId: Date.now(), fullName: (g.name || g.email.split('@')[0]).trim(), email: g.email, password: null, role: 'STUDENT', locked: false, provider: 'GOOGLE', avatar: g.picture || '' }; db.users.push(u); created = true; }
       u.googleLinked = true; if (!u.avatar && g.picture) u.avatar = g.picture; // same email = same account; the picture is saved on the account so every login method shows it
+      log('ACCOUNT', created ? 'REGISTERED' : 'LOGIN', { user: u, actor: u.fullName, detail: 'Google sign-in' });
       return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
     if (R('GET', /^\/categories$/)) return db.categories;
@@ -545,6 +575,15 @@ function mock(method, path, body) {
       return { ...l, courseId: c.courseId };
     }
 
+    if (R('POST', /^\/support$/)) { // public: guests can write too
+      const b = body || {}, name = me ? me.fullName : (b.name || '').trim(), email = me ? me.email : (b.email || '').trim();
+      need(name, 'Name is required'); need(/^\S+@\S+\.\S+$/.test(email), 'Enter a valid email'); need(['PAYMENT', 'COURSE', 'ACCOUNT', 'OTHER'].includes(b.category), 'Choose a topic');
+      need((b.subject || '').trim().length >= 3, 'Subject is required'); need((b.message || '').trim().length >= 10, 'Message must be at least 10 characters');
+      const c = b.courseId ? db.courses.find(x => x.courseId === +b.courseId) : null;
+      const t = { ticketId: ++db.tid, userId: me?.userId ?? null, name, email, category: b.category, courseId: c?.courseId ?? null, courseTitle: c?.title ?? '', subject: b.subject.trim().slice(0, 100), message: b.message.trim().slice(0, 1000), status: 'OPEN', reply: null, repliedAt: null, createdAt: now() };
+      db.tickets.push(t); db.users.filter(u => u.role === 'ADMIN').forEach(u => notify(u.userId, 'New support ticket: "' + t.subject + '"', 'admin.html')); return { ticketId: t.ticketId };
+    }
+
     /* ---- any logged-in user ---- */
     if (!me) err(401, 'Please log in first'); if (me.locked) err(403, 'This account has been locked');
     if (R('GET', /^\/users\/me$/)) return pubUser(me);
@@ -554,7 +593,8 @@ function mock(method, path, body) {
       if (!me.password) { if (body?.newPassword) { need(body.newPassword.length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; } else need(body?.force === true, 'Set a password (min 6 characters) before unbinding Google'); }
       me.googleLinked = false; if (/^https?:/i.test(me.avatar || '')) me.avatar = ''; return null;
     }
-    if (R('PUT', /^\/users\/me\/password$/)) { if (me.password && me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; return null; }
+    if (R('PUT', /^\/users\/me\/password$/)) { if (me.password && me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; log('ACCOUNT', 'PASSWORD_CHANGED', { user: me, detail: 'Changed by the user' }); return null; }
+    if (R('GET', /^\/support\/me$/)) return db.tickets.filter(t => t.userId === uid).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ticketId - a.ticketId);
     if (R('GET', /^\/notifications\/me$/)) return db.notifications.filter(n => n.userId === uid).sort((a, b) => b.notificationId - a.notificationId).slice(0, 20);
     if (R('POST', /^\/notifications\/read$/)) { db.notifications.forEach(n => { if (n.userId === uid) n.read = true; }); return null; }
     if (R('GET', /^\/enrollments\/me$/)) return db.enrollments.filter(e => e.userId === uid).map(e => {
@@ -566,17 +606,21 @@ function mock(method, path, body) {
       if (enrolledIn(c.courseId)) err(409, 'You are already enrolled in this course');
       if (!admin && c.price > 0 && !['CARD', 'EWALLET', 'BANK', 'DEMO'].includes(body?.paymentMethod)) err(400, 'Choose a payment method');
       const en = { enrollmentId: ++db.eid, courseId: c.courseId, userId: uid, pricePaid: admin ? 0 : c.price, paymentMethod: admin ? 'ADMIN' : c.price ? body.paymentMethod : null, enrolledAt: now() };
-      db.enrollments.push(en); notify(c.instructorId, me.fullName + ' enrolled in "' + c.title + '"', 'course.html?id=' + c.courseId); return { enrollmentId: en.enrollmentId, courseId: c.courseId, title: c.title };
+      db.enrollments.push(en); log('ENROLLMENT', 'ENROLLED', { user: me, course: c });
+      if (en.pricePaid > 0) log('PAYMENT', 'PAID', { user: me, course: c, amount: en.pricePaid, method: en.paymentMethod });
+      notify(c.instructorId, me.fullName + ' enrolled in "' + c.title + '"', 'course.html?id=' + c.courseId); return { enrollmentId: en.enrollmentId, courseId: c.courseId, title: c.title };
     }
     if (R('DELETE', /^\/courses\/(\d+)\/enroll$/)) {
       const id = +m[1]; if (!enrolledIn(id)) err(404, 'You are not enrolled in this course');
+      log('ENROLLMENT', 'UNENROLLED', { user: me, course: db.courses.find(x => x.courseId === id) });
       db.enrollments = db.enrollments.filter(e => !(e.courseId === id && e.userId === uid)); db.progress = db.progress.filter(p => !(p.courseId === id && p.userId === uid)); return null;
     }
     if (R('PUT', /^\/courses\/(\d+)\/progress$/)) {
       const c = course(m[1]); if (!enrolledIn(c.courseId)) err(403, 'Enroll in this course first');
       const l = lessonsOf(c).find(l => l.lessonId === +body.lessonId) || err(404, 'Lesson not found'), was = progress(c).percent;
       db.progress = db.progress.filter(p => !(p.userId === uid && p.lessonId === l.lessonId)); if (body.done !== false) db.progress.push({ userId: uid, courseId: c.courseId, lessonId: l.lessonId });
-      const p = progress(c); if (p.percent === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId); return p;
+      const p = progress(c); if (p.percent === 100 && was < 100) log('COMPLETION', 'COMPLETED', { user: me, course: c, detail: p.completed.length + ' lessons, ' + p.passedQuizzes + '/' + p.totalQuizzes + ' quizzes' });
+      if (p.percent === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId); return p;
     }
     if (R('GET', /^\/quizzes\/(\d+)$/)) {
       const { c, q } = findQuiz(m[1]); if (!(admin || own(c) || enrolledIn(c.courseId))) err(403, 'Enroll in this course to take the quiz');
@@ -592,7 +636,8 @@ function mock(method, path, body) {
       const ans = body.answers || {}; need(q.questions.every(x => ans[x.questionId] != null), 'Answer every question before submitting');
       const correct = {}; let ok = 0; q.questions.forEach(x => { const co = x.options.find(o => o.correct); correct[x.questionId] = co.optionId; if (+ans[x.questionId] === co.optionId) ok++; });
       const was = progress(c).percent, score = Math.round(ok / q.questions.length * 100), passed = score >= q.passScore; db.attempts.push({ attemptId: ++db.aid, quizId: q.quizId, userId: uid, score, passed, createdAt: now() });
-      const after = progress(c).percent; if (after === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId);
+      const ap = progress(c), after = ap.percent; if (after === 100 && was < 100) log('COMPLETION', 'COMPLETED', { user: me, course: c, detail: ap.completed.length + ' lessons, ' + ap.passedQuizzes + '/' + ap.totalQuizzes + ' quizzes' });
+      if (after === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId);
       return { score, passed, passScore: q.passScore, correctCount: ok, total: q.questions.length, correct, attemptsUsed: used + 1, courseCompleted: after === 100 };
     }
     if (R('POST', /^\/courses\/(\d+)\/reviews$/)) {
@@ -603,10 +648,43 @@ function mock(method, path, body) {
     if (R('PUT', /^\/reviews\/(\d+)$/)) { const r = db.reviews.find(x => x.reviewId === +m[1]) || err(404, 'Review not found'); if (r.userId !== uid) err(403, 'You can only edit your own review'); reviewOk(body); r.rating = +body.rating; r.comment = (body.comment || '').trim(); return r; }
     if (R('DELETE', /^\/reviews\/(\d+)$/)) { const r = db.reviews.find(x => x.reviewId === +m[1]) || err(404, 'Review not found'); if (r.userId !== uid && !admin) err(403, 'You can only delete your own review'); db.reviews = db.reviews.filter(x => x !== r); return null; }
 
-    /* ---- instructor (owner) or admin ---- */
-    if (R('GET', /^\/instructor\/courses$/)) { if (!instr && !admin) err(403, 'Instructor access only'); return db.courses.filter(c => admin || own(c)).map(view); }
+    /* ---- shopping cart (any logged-in user except ADMIN, who enrolls without payment) ---- */
+    const cartRows = () => db.cart.filter(x => x.userId === uid && db.courses.some(c => c.courseId === x.courseId)).map(x => ({ ...view(db.courses.find(c => c.courseId === x.courseId)), addedAt: x.addedAt }));
+    const cartTotal = rows => rows.reduce((t, c) => t + c.price, 0);
+    if (R('GET', /^\/cart$/)) { const rows = cartRows(); return { items: rows, count: rows.length, total: cartTotal(rows) }; }
+    if (R('POST', /^\/cart\/(\d+)$/)) {
+      if (admin) err(400, 'Admins enroll without payment, so they do not use the cart');
+      const c = course(m[1]); if (c.status !== 'PUBLISHED') err(404, 'Course not found'); if (own(c)) err(400, 'You cannot buy your own course');
+      if (enrolledIn(c.courseId)) err(409, 'You are already enrolled in this course');
+      if (db.cart.some(x => x.userId === uid && x.courseId === c.courseId)) err(409, 'This course is already in your cart');
+      db.cart.push({ userId: uid, courseId: c.courseId, addedAt: now() }); return { courseId: c.courseId, count: cartRows().length };
+    }
+    if (R('DELETE', /^\/cart\/(\d+)$/)) {
+      if (!db.cart.some(x => x.userId === uid && x.courseId === +m[1])) err(404, 'That course is not in your cart');
+      db.cart = db.cart.filter(x => !(x.userId === uid && x.courseId === +m[1])); return null;
+    }
+    if (R('DELETE', /^\/cart$/)) { db.cart = db.cart.filter(x => x.userId !== uid); return null; }
+    if (R('POST', /^\/cart\/checkout$/)) { // enrolls in every course in the cart; same records, logs and notifications as POST /courses/{id}/enroll
+      if (admin) err(400, 'Admins enroll without payment, so they do not use the cart');
+      const rows = cartRows(); need(rows.length, 'Your cart is empty');
+      if (rows.some(c => c.price > 0) && !['CARD', 'EWALLET', 'BANK', 'DEMO'].includes(body?.paymentMethod)) err(400, 'Choose a payment method');
+      const done = [], skipped = [];
+      rows.forEach(v => {
+        const c = db.courses.find(x => x.courseId === v.courseId);
+        if (c.status !== 'PUBLISHED' || own(c) || enrolledIn(c.courseId)) { skipped.push({ courseId: c.courseId, title: c.title }); return; }
+        const en = { enrollmentId: ++db.eid, courseId: c.courseId, userId: uid, pricePaid: c.price, paymentMethod: c.price ? body.paymentMethod : null, enrolledAt: now() };
+        db.enrollments.push(en); log('ENROLLMENT', 'ENROLLED', { user: me, course: c });
+        if (en.pricePaid > 0) log('PAYMENT', 'PAID', { user: me, course: c, amount: en.pricePaid, method: en.paymentMethod, detail: 'Cart checkout' });
+        notify(c.instructorId, me.fullName + ' enrolled in "' + c.title + '"', 'course.html?id=' + c.courseId);
+        done.push({ enrollmentId: en.enrollmentId, courseId: c.courseId, title: c.title, price: c.price });
+      });
+      db.cart = db.cart.filter(x => x.userId !== uid);
+      return { orderNumber: done.length ? 'LH-' + String(done[done.length - 1].enrollmentId).padStart(6, '0') : null, paymentMethod: body?.paymentMethod || null, items: done, skipped, total: done.reduce((t, x) => t + x.price, 0) };
+    }
+
+    /* ---- course management (admin only) ---- */
+    if (R('GET', /^\/instructor\/courses$/)) { if (!admin) err(403, 'Admin only'); return db.courses.map(view); }
     if (R('GET', /^\/instructor\/courses\/(\d+)$/)) { const c = manage(course(m[1])); return { ...view(c), sections: c.sections }; }
-    if (R('POST', /^\/courses$/)) { if (!instr) err(403, 'Only instructors can create courses'); const c = { courseId: Date.now(), ...courseBody(body), status: 'DRAFT', rejectReason: null, instructorId: uid, language: 'English', sections: [] }; db.courses.push(c); return view(c); }
     if (R('PUT', /^\/courses\/(\d+)$/)) { const c = manage(course(m[1])); Object.assign(c, courseBody(body)); return view(c); }
     if (R('DELETE', /^\/courses\/(\d+)$/)) {
       const c = manage(course(m[1])); if (db.enrollments.some(e => e.courseId === c.courseId)) err(409, 'Cannot delete a course that has enrolled students');
@@ -646,6 +724,27 @@ function mock(method, path, body) {
     /* ---- admin only ---- */
     if (!admin) err(403, 'Admin only');
     if (R('GET', /^\/admin\/courses$/)) return db.courses.map(view);
+    const adminCourse = b => { // fields only an admin can set: status + owner
+      const status = b.status || 'DRAFT', ins = db.users.find(u => u.userId === +b.instructorId);
+      need(['DRAFT', 'PENDING', 'PUBLISHED', 'REJECTED'].includes(status), 'Invalid status'); need(ins && (ins.role === 'ADMIN' || ins.author), 'Choose an instructor');
+      need(status !== 'REJECTED' || (b.rejectReason && b.rejectReason.trim()), 'A reject reason is required');
+      return { status, instructorId: ins.userId, rejectReason: status === 'REJECTED' ? b.rejectReason.trim() : null };
+    };
+    if (R('POST', /^\/admin\/courses$/)) { const a = adminCourse(body), c = { courseId: Date.now(), ...courseBody(body), ...a, language: 'English', sections: [] }; db.courses.push(c); return view(c); }
+    if (R('PUT', /^\/admin\/courses\/(\d+)$/)) { const c = course(m[1]), cb = courseBody(body); if (body.details === undefined) delete cb.details; Object.assign(c, cb, adminCourse(body)); return view(c); }
+    if (R('DELETE', /^\/admin\/courses\/(\d+)$/)) { // admin delete also removes enrollments, progress, reviews and quiz attempts
+      const c = course(m[1]), quizIds = c.sections.filter(s => s.quiz).map(s => s.quiz.quizId);
+      db.courses = db.courses.filter(x => x !== c); db.enrollments = db.enrollments.filter(e => e.courseId !== c.courseId); db.progress = db.progress.filter(p => p.courseId !== c.courseId);
+      db.reviews = db.reviews.filter(r => r.courseId !== c.courseId); db.attempts = db.attempts.filter(a => !quizIds.includes(a.quizId)); return null;
+    }
+    if (R('GET', /^\/admin\/tickets$/)) return [...db.tickets].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ticketId - a.ticketId);
+    if (R('PUT', /^\/admin\/tickets\/(\d+)$/)) {
+      const t = db.tickets.find(x => x.ticketId === +m[1]) || err(404, 'Ticket not found'), status = body.status || t.status, reply = (body.reply || '').trim();
+      need(['OPEN', 'RESOLVED'].includes(status), 'Invalid status');
+      if (reply) { t.reply = reply.slice(0, 1000); t.repliedAt = now(); if (t.userId) notify(t.userId, 'Support replied to "' + t.subject + '"', 'index.html#support'); }
+      t.status = status; return t;
+    }
+    if (R('GET', /^\/admin\/logs\/(account|payment|enrollment|completion)$/)) return db.logs.filter(l => l.type === m[1].toUpperCase()).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.logId - a.logId).slice(0, 500);
     if (R('POST', /^\/admin\/courses\/(\d+)\/approve$/)) { const c = course(m[1]); need(c.status === 'PENDING', 'Only pending courses can be approved'); c.status = 'PUBLISHED'; c.rejectReason = null; notify(c.instructorId, 'Your course "' + c.title + '" was approved and is now published.', 'course.html?id=' + c.courseId); return view(c); }
     if (R('POST', /^\/admin\/courses\/(\d+)\/reject$/)) {
       const c = course(m[1]); need(c.status === 'PENDING', 'Only pending courses can be rejected'); need(body.reason && body.reason.trim(), 'A reason is required'); c.status = 'REJECTED'; c.rejectReason = body.reason.trim();
@@ -658,13 +757,13 @@ function mock(method, path, body) {
     }
     if (R('DELETE', /^\/categories\/(\d+)$/)) { const k = db.categories.find(x => x.categoryId === +m[1]) || err(404, 'Category not found'); if (db.courses.some(c => c.categoryId === k.categoryId)) err(409, 'Cannot delete a category that has courses'); db.categories = db.categories.filter(x => x !== k); return null; }
     if (R('GET', /^\/admin\/users$/)) return db.users.map(u => ({ ...pubUser(u), enrollments: db.enrollments.filter(e => e.userId === u.userId).length, courses: db.courses.filter(c => c.instructorId === u.userId).length }));
-    if (R('PUT', /^\/admin\/users\/(\d+)\/role$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot change your own role'); need(['STUDENT', 'INSTRUCTOR', 'ADMIN'].includes(body.role), 'Invalid role'); u.role = body.role; return null; }
-    if (R('PUT', /^\/admin\/users\/(\d+)\/lock$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot lock your own account'); u.locked = !!body.locked; return null; }
+    if (R('PUT', /^\/admin\/users\/(\d+)\/role$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot change your own role'); need(['STUDENT', 'ADMIN'].includes(body.role), 'Invalid role'); log('ACCOUNT', 'ROLE_CHANGED', { user: u, detail: u.role + ' -> ' + body.role }); u.role = body.role; return null; }
+    if (R('PUT', /^\/admin\/users\/(\d+)\/lock$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot lock your own account'); u.locked = !!body.locked; log('ACCOUNT', u.locked ? 'LOCKED' : 'UNLOCKED', { user: u }); return null; }
     if (R('GET', /^\/admin\/reviews$/)) return [...db.reviews].sort((a, b) => b.reviewId - a.reviewId).slice(0, 50).map(r => ({ reviewId: r.reviewId, courseTitle: db.courses.find(c => c.courseId === r.courseId)?.title, userName: db.users.find(u => u.userId === r.userId)?.fullName || r.userName, rating: r.rating, comment: r.comment, createdAt: r.createdAt }));
     if (R('GET', /^\/admin\/stats$/)) {
       const pub = db.courses.filter(c => c.status === 'PUBLISHED');
       return {
-        users: db.users.length, courses: db.courses.length, published: pub.length, pending: db.courses.filter(c => c.status === 'PENDING').length, enrollments: db.enrollments.length, reviews: db.reviews.length,
+        users: db.users.length, courses: db.courses.length, published: pub.length, pending: db.courses.filter(c => c.status === 'PENDING').length, enrollments: db.enrollments.length, reviews: db.reviews.length, openTickets: db.tickets.filter(t => t.status === 'OPEN').length,
         topCourses: pub.map(c => ({ courseId: c.courseId, title: c.title, enrolled: db.enrollments.filter(e => e.courseId === c.courseId).length })).sort((a, b) => b.enrolled - a.enrolled).slice(0, 5)
       };
     }
@@ -694,15 +793,16 @@ function card(c, mine) {
   const avatar = u?.avatar || '';
   const modeLabel = CONFIG.USE_MOCK ? 'Mock data' : 'Live API';
   document.body.insertAdjacentHTML('afterbegin', `<div class="bg"><i></i><i></i><i></i><i></i></div>
-  <nav class="navbar navbar-expand-lg sticky-top glass ${role === 'ADMIN' ? 'admin-nav' : role === 'INSTRUCTOR' ? 'instr-nav' : ''}"><div class="container">
+  <nav class="navbar navbar-expand-lg sticky-top glass ${role === 'ADMIN' ? 'admin-nav' : ''}"><div class="container">
    <a class="navbar-brand fw-bold" href="index.html"><i class="bi bi-mortarboard-fill"></i> Skill<span>Trail</span></a>
    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
    <div class="collapse navbar-collapse" id="nav"><ul class="navbar-nav me-auto">
     <li class="nav-item"><a class="nav-link${on('index.html')}" href="index.html">Home</a></li>
     <li class="nav-item"><a class="nav-link" href="index.html#courses">Courses</a></li>
-    <li class="nav-item"><a class="nav-link" href="index.html#about">About</a></li>
-    <li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
+    <li class="nav-item"><a class="nav-link" href="index.html#help">Help</a></li>
+    <li class="nav-item"><a class="nav-link" href="index.html#support">Support</a></li>
     ${u ? `<li class="nav-item"><a class="nav-link${on('my-courses.html')}" href="my-courses.html">My Courses</a></li>` : ''}
+    ${role === 'ADMIN' ? `<li class="nav-item"><a class="nav-link${on('admin.html')}" href="admin.html"><i class="bi bi-shield-lock"></i> Admin</a></li>` : ''}
 
    </ul>
    ${u ? `<div class="dropdown d-inline-block me-2"><button class="btn btn-outline-light btn-sm position-relative" id="bell" data-bs-toggle="dropdown" aria-label="Notifications"><i class="bi bi-bell"></i><span id="bellN" class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle d-none"></span></button>
@@ -715,7 +815,7 @@ function card(c, mine) {
   const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const live = localStorage.getItem('learnpath-mode') === 'live'; localStorage.setItem('learnpath-mode', live ? 'mock' : 'live'); toast(live ? 'Mock data mode enabled' : 'Live API mode enabled'); setTimeout(() => location.reload(), 250); });
   document.body.insertAdjacentHTML('beforeend', `<footer class="glass text-center py-4 mt-auto">
    <div class="fs-5 fw-bold mb-2"><i class="bi bi-mortarboard-fill"></i> SkillTrail</div>
-   <div class="links mb-2"><a href="index.html" class="mx-2">Home</a><a href="index.html#courses" class="mx-2">Courses</a><a href="index.html#about" class="mx-2">About</a><a href="index.html#contact" class="mx-2">Contact</a></div>
+   <div class="links mb-2"><a href="index.html" class="mx-2">Home</a><a href="index.html#courses" class="mx-2">Courses</a><a href="index.html#help" class="mx-2">Help</a><a href="index.html#support" class="mx-2">Support</a></div>
    <div class="mb-2"><a href="#" class="mx-2"><i class="bi bi-facebook"></i></a><a href="#" class="mx-2"><i class="bi bi-instagram"></i></a>
    <a href="#" class="mx-2"><i class="bi bi-twitter-x"></i></a><a href="#" class="mx-2"><i class="bi bi-github"></i></a></div>
    <small class="text-secondary">&copy; 2026 SkillTrail. All rights reserved.</small></footer>
@@ -725,7 +825,7 @@ function card(c, mine) {
     <div class="modal-body"><div id="cfIcon" class="cf-icon danger"><i class="bi bi-exclamation-triangle-fill"></i></div><h5 id="cfTitle" class="mb-2"></h5><p id="cfMsg" class="text-secondary mb-4"></p>
     <div class="d-flex gap-2"><button class="btn btn-outline-light flex-fill" data-bs-dismiss="modal">Cancel</button><button id="cfOk" class="btn btn-danger flex-fill"></button></div></div></div></div></div>`);
   
-  /* ---- Smooth navigation to #courses / #about / #contact ---------------------------------
+  /* ---- Smooth navigation to #courses / #help / #support ---------------------------------
      Arriving from another page (My Courses, Profile, ...): the home page opens at the top, waits until
      its layout has finished loading (the course grid is fetched and rendered after load), then glides
      down to the section. Waiting matters: scrolling while content is still being inserted would stop
@@ -761,8 +861,8 @@ function card(c, mine) {
     const spy = () => {
       const y = NAV_OFFSET + 80, top = id => { const s = document.getElementById(id); return s ? s.getBoundingClientRect().top : Infinity; };
       let act = by('index.html');
-      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) act = by('index.html#contact');
-      else for (const id of ['contact', 'about', 'courses']) if (top(id) <= y) { act = by('index.html#' + id); break; }
+      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) act = by('index.html#support');
+      else for (const id of ['support', 'help', 'courses']) if (top(id) <= y) { act = by('index.html#' + id); break; }
       links.forEach(a => a.classList.toggle('active', a === act));
     };
     addEventListener('scroll', spy, { passive: true }); addEventListener('resize', spy); addEventListener('load', spy);
@@ -800,4 +900,53 @@ function card(c, mine) {
     }).catch(() => { });
     $('#bell').addEventListener('show.bs.dropdown', () => { if (!$('#bellN').classList.contains('d-none')) { $('#bellN').classList.add('d-none'); api('/notifications/read', 'POST').catch(() => { }); } });
   }
+})();
+
+/* ===== ADD-ON: shopping cart =====
+   Appended after the shared layout so nothing above is modified. It (1) adds a cart icon with a count badge to the navbar,
+   and (2) adds an "Add to cart" button next to "Buy now" on course.html. */
+async function refreshCartBadge() {
+  const b = document.getElementById('cartN'), link = document.getElementById('cartLink'); if (!b || !link) return;
+  try {
+    const c = await api('/cart'); link.classList.remove('d-none');
+    b.textContent = c.count; b.classList.toggle('d-none', !c.count);
+  } catch (e) { link.classList.add('d-none'); } // live API without /cart: hide the icon instead of showing errors
+}
+document.addEventListener('cartchange', refreshCartBadge);
+(function cartNav() {
+  const u = state.user, role = u?.role, here = location.pathname.split('/').pop() || 'index.html';
+  if (!u || !document.querySelector('#nav .navbar-nav')) return;
+  if (role !== 'ADMIN') { // admins enroll without payment, so no cart
+    const anchor = document.getElementById('bell')?.parentElement;
+    if (anchor) anchor.insertAdjacentHTML('beforebegin',
+      `<a id="cartLink" href="cart.html" class="btn btn-outline-light btn-sm position-relative me-2 d-none${here === 'cart.html' ? ' active' : ''}" aria-label="Shopping cart"><i class="bi bi-cart3"></i><span id="cartN" class="badge bg-danger rounded-pill position-absolute top-0 start-100 translate-middle d-none"></span></a>`);
+    refreshCartBadge();
+  }
+})();
+(function addToCartButton() {
+  if (!/\/course\.html$/.test(location.pathname) || !state.user || state.user.role === 'ADMIN') return;
+  const id = +new URLSearchParams(location.search).get('id'); if (!id) return;
+  let busy = false, mark = '';
+  const inject = async () => {
+    const buy = document.querySelector('#page [data-act="enroll"]'); // only exists for a non-enrolled visitor
+    if (!buy || document.getElementById('cartBtn') || busy) return;
+    if (/Enroll for free/i.test(buy.textContent)) return; // free courses enroll in one click, no cart needed
+    busy = true;
+    try {
+      const inCart = (await api('/cart')).items.some(c => c.courseId === id);
+      if (document.getElementById('cartBtn') || !document.body.contains(buy)) return;
+      buy.insertAdjacentHTML('afterend', inCart
+        ? '<a id="cartBtn" href="cart.html" class="btn btn-outline-light w-100 mt-2"><i class="bi bi-cart-check"></i> Go to cart</a>'
+        : '<button id="cartBtn" type="button" class="btn btn-outline-light w-100 mt-2"><i class="bi bi-cart-plus"></i> Add to cart</button>');
+      const btn = document.getElementById('cartBtn');
+      if (btn.tagName === 'BUTTON') btn.onclick = async () => {
+        btn.disabled = true;
+        try { await api('/cart/' + id, 'POST'); toast('Added to your cart'); document.dispatchEvent(new Event('cartchange')); btn.outerHTML = '<a id="cartBtn" href="cart.html" class="btn btn-outline-light w-100 mt-2"><i class="bi bi-cart-check"></i> Go to cart</a>'; }
+        catch (x) { toast(x.message || 'Could not add to cart', 'danger'); btn.disabled = false; }
+      };
+    } catch (e) { /* cart not available: leave the page as it was */ } finally { busy = false; }
+  };
+  const page = document.getElementById('page'); if (!page) return;
+  new MutationObserver(() => { const k = page.innerHTML.length + ':' + !!document.getElementById('cartBtn'); if (k !== mark) { mark = k; inject(); } }).observe(page, { childList: true, subtree: true });
+  inject();
 })();

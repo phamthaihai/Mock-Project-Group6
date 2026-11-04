@@ -17,7 +17,8 @@ CREATE TABLE Users(
   FullName NVARCHAR(100) NOT NULL,
   Email NVARCHAR(150) NOT NULL UNIQUE,
   PasswordHash NVARCHAR(255) NOT NULL,
-  Role VARCHAR(10) NOT NULL DEFAULT 'STUDENT' CHECK (Role IN ('STUDENT','INSTRUCTOR','ADMIN')),
+  Role VARCHAR(10) NOT NULL DEFAULT 'STUDENT' CHECK (Role IN ('STUDENT','ADMIN')),
+  IsAuthor BIT NOT NULL DEFAULT 0,  -- course author profile (the teacher shown on a course); not a role, and such rows do not log in (Locked = 1)
   Locked BIT NOT NULL DEFAULT 0,
   CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME());
 CREATE TABLE Categories(
@@ -102,6 +103,41 @@ CREATE TABLE Notifications(
   Link NVARCHAR(200) NULL,
   IsRead BIT NOT NULL DEFAULT 0,
   CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME());
+-- Activity log shown on the admin page (Type: ACCOUNT / PAYMENT / ENROLLMENT / COMPLETION). The server inserts one row per event.
+CREATE TABLE ActivityLogs(
+  LogId BIGINT IDENTITY(1,1) PRIMARY KEY,
+  LogType VARCHAR(12) NOT NULL CHECK (LogType IN ('ACCOUNT','PAYMENT','ENROLLMENT','COMPLETION')),
+  Action VARCHAR(20) NOT NULL,        -- REGISTERED, LOGIN, LOGIN_FAILED, LOGIN_BLOCKED, PASSWORD_CHANGED, ROLE_CHANGED, LOCKED, UNLOCKED, ENROLLED, UNENROLLED, PAID, COMPLETED
+  UserId INT NULL REFERENCES Users(UserId) ON DELETE SET NULL,
+  Email NVARCHAR(150) NULL,           -- kept so failed logins and deleted users are still readable
+  CourseId INT NULL REFERENCES Courses(CourseId) ON DELETE SET NULL,
+  CourseTitle NVARCHAR(150) NULL,     -- snapshot, survives course deletion
+  Amount DECIMAL(12,2) NULL,          -- PAYMENT only
+  PaymentMethod NVARCHAR(30) NULL,    -- PAYMENT only
+  Detail NVARCHAR(300) NULL,
+  ActorName NVARCHAR(100) NULL,       -- who did it (the user, or the admin for ROLE_CHANGED / LOCKED / UNLOCKED)
+  CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME());
+CREATE INDEX IX_ActivityLogs_Type_Time ON ActivityLogs(LogType, CreatedAt DESC);
+-- Help & Support requests (guests can send one, so UserId may be NULL)
+CREATE TABLE SupportTickets(
+  TicketId INT IDENTITY(1,1) PRIMARY KEY,
+  UserId INT NULL REFERENCES Users(UserId) ON DELETE SET NULL,
+  Name NVARCHAR(100) NOT NULL,
+  Email NVARCHAR(150) NOT NULL,
+  Category VARCHAR(10) NOT NULL CHECK (Category IN ('PAYMENT','COURSE','ACCOUNT','OTHER')),
+  CourseId INT NULL REFERENCES Courses(CourseId) ON DELETE SET NULL,
+  Subject NVARCHAR(100) NOT NULL,
+  Message NVARCHAR(1000) NOT NULL,
+  Status VARCHAR(10) NOT NULL DEFAULT 'OPEN' CHECK (Status IN ('OPEN','RESOLVED')),
+  Reply NVARCHAR(1000) NULL,
+  RepliedAt DATETIME2 NULL,
+  CreatedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME());
+-- Shopping cart: one row per (user, course). Emptied by POST /cart/checkout, which creates the Enrollments rows.
+CREATE TABLE CartItems(
+  UserId INT NOT NULL REFERENCES Users(UserId) ON DELETE CASCADE,
+  CourseId INT NOT NULL REFERENCES Courses(CourseId) ON DELETE CASCADE,
+  AddedAt DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+  PRIMARY KEY (UserId, CourseId));                                                     -- adding twice -> 409
 GO
 INSERT INTO Categories (Name) VALUES ('Programming'), ('Data'), ('Design'), ('Business'), ('Languages'), ('Marketing');
 -- Admin account: email admin@gmail.com, password 123456 (BCrypt hash)

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="js/theme.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+  <link href="css/theme.css" rel="stylesheet">
+  <style>
+    .opt-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+    .q-card { border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 0.8rem; margin-bottom: 0.8rem; }
+    .admin-stat {
+      padding: 1rem 1.2rem;
+      border-radius: 16px;
+      height: 100%;
+    }
+
+    .admin-stat b {
+      display: block;
+      font-size: 1.7rem;
+      line-height: 1.1;
+    }
+
+    .admin-stat small {
+      color: var(--bs-secondary-color);
+    }
+
+    .admin-tabs .nav-link {
+      border-radius: 50rem;
+      margin-right: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .admin-table th {
+      white-space: nowrap;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .admin-table td {
+      font-size: 0.9rem;
+    }
+
+    .admin-thumb {
+      width: 56px;
+      height: 38px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+
+    .log-scroll {
+      max-height: 65vh;
+      overflow: auto;
+    }
+
+    .log-scroll thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--bs-body-bg);
+    }
+  </style>
+  <title>SkillTrail · Admin console</title>
+</head>
+
+<body>
+  <main class="container py-5" style="max-width:1280px">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+      <div>
+        <span class="eyebrow">ADMIN CONSOLE</span>
+        <h1 class="display-6 fw-bold mt-2 mb-1">Admin dashboard</h1>
+        <p class="text-secondary mb-0">Manage courses and monitor account, payment, enrollment and completion activity.</p>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4" id="stats"></div>
+
+    <ul class="nav nav-pills admin-tabs mb-3" id="tabs">
+      <li class="nav-item"><button class="nav-link active" data-tab="courses"><i class="bi bi-journal-richtext"></i> Courses</button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="account"><i class="bi bi-person-lock"></i> Account logs</button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="payment"><i class="bi bi-credit-card"></i> Payment logs</button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="enrollment"><i class="bi bi-person-plus"></i> Enrollment logs</button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="completion"><i class="bi bi-patch-check"></i> Completion logs</button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="support"><i class="bi bi-life-preserver"></i> Support <span class="badge bg-danger d-none" id="tkBadge"></span></button></li>
+    </ul>
+
+    <!-- Courses -->
+    <section id="pane-courses" class="glass p-3 p-md-4">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <input id="cSearch" class="form-control" style="max-width:280px" placeholder="Search title or instructor">
+        <select id="cStatus" class="form-select" style="max-width:170px">
+          <option value="">All statuses</option>
+          <option>DRAFT</option>
+          <option>PENDING</option>
+          <option>PUBLISHED</option>
+          <option>REJECTED</option>
+        </select>
+        <span class="text-secondary small" id="cCount"></span>
+        <button class="btn btn-primary ms-auto" data-act="add"><i class="bi bi-plus-lg"></i> Add course</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table admin-table align-middle mb-0">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Course</th>
+              <th>Category</th>
+              <th>Instructor</th>
+              <th>Price</th>
+              <th>Students</th>
+              <th>Status</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="cBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Support tickets -->
+    <section id="pane-support" class="glass p-3 p-md-4 d-none">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <h2 class="h5 mb-0 me-2">Support requests</h2>
+        <input id="tSearch" class="form-control" style="max-width:260px" placeholder="Search">
+        <select id="tStatus" class="form-select" style="max-width:160px">
+          <option value="">All</option>
+          <option value="OPEN" selected>Open</option>
+          <option value="RESOLVED">Resolved</option>
+        </select>
+        <span class="text-secondary small" id="tCount"></span>
+        <button class="btn btn-outline-light ms-auto" id="tRefresh"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <div class="table-responsive log-scroll">
+        <table class="table admin-table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>From</th>
+              <th>Topic</th>
+              <th>Subject</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Logs (one pane reused by the four log tabs) -->
+    <section id="pane-logs" class="glass p-3 p-md-4 d-none">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <h2 class="h5 mb-0 me-2" id="lTitle"></h2>
+        <input id="lSearch" class="form-control" style="max-width:260px" placeholder="Search">
+        <select id="lAction" class="form-select" style="max-width:190px"></select>
+        <span class="text-secondary small" id="lCount"></span>
+        <div class="ms-auto d-flex gap-2">
+          <button class="btn btn-outline-light" id="lRefresh"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+          <button class="btn btn-outline-light" id="lCsv"><i class="bi bi-download"></i> CSV</button>
+        </div>
+      </div>
+      <div class="table-responsive log-scroll">
+        <table class="table admin-table align-middle mb-0">
+          <thead id="lHead"></thead>
+          <tbody id="lBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add / edit course -->
+  <div class="modal fade" id="courseModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <form class="modal-content glass" id="courseForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="cmTitle">Add course</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label">Title</label>
+              <input name="title" class="form-control" maxlength="150" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Category</label>
+              <select name="categoryId" class="form-select" required></select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Level</label>
+              <select name="level" class="form-select">
+                <option>Beginner</option>
+                <option>Intermediate</option>
+                <option>Advanced</option>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Price (VND, 0 = free)</label>
+              <input name="price" type="number" min="0" step="1000" value="0" class="form-control" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Instructor</label>
+              <select name="instructorId" class="form-select" required></select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Status</label>
+              <select name="status" class="form-select">
+                <option>DRAFT</option>
+                <option>PENDING</option>
+                <option>PUBLISHED</option>
+                <option>REJECTED</option>
+              </select>
+            </div>
+            <div class="col-12 d-none" id="rejectBox">
+              <label class="form-label">Reject reason</label>
+              <input name="rejectReason" class="form-control" maxlength="500">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Image URL (optional)</label>
+              <input name="imageUrl" type="url" class="form-control" placeholder="https://...">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Description</label>
+              <textarea name="description" rows="4" class="form-control"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" id="cmSave">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Support ticket -->
+  <div class="modal fade" id="ticketModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content glass">
+        <div class="modal-header">
+          <h5 class="modal-title" id="tkSubject"></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="small text-secondary mb-2" id="tkMeta"></div>
+          <div class="glass p-3 mb-3" id="tkMsg" style="white-space:pre-wrap"></div>
+          <div id="tkPrev" class="small border-start border-3 border-success ps-2 mb-3 d-none"></div>
+          <label class="form-label">Your reply</label>
+          <textarea id="tkReply" rows="4" class="form-control" maxlength="1000" placeholder="Write a reply. The student gets a notification."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-light d-none" id="tkReopen">Reopen</button>
+          <button class="btn btn-outline-light" id="tkSend">Send reply</button>
+          <button class="btn btn-success" id="tkResolve">Reply &amp; resolve</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Curriculum (sections + lessons) -->
+  <div class="modal fade" id="currModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content glass">
+        <div class="modal-header">
+          <h5 class="modal-title" id="curTitle">Curriculum</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div id="curBody"></div>
+          <hr>
+          <form id="secForm" class="d-flex gap-2 mb-3">
+            <input name="title" class="form-control" placeholder="New section title" required>
+            <button class="btn btn-outline-light text-nowrap"><i class="bi bi-plus-lg"></i> Add section</button>
+          </form>
+          <form id="lesForm" class="row g-2">
+            <div class="col-md-4">
+              <select name="sectionId" class="form-select" required></select>
+            </div>
+            <div class="col-md-5">
+              <input name="title" class="form-control" placeholder="Lesson title" required>
+            </div>
+            <div class="col-md-3">
+              <select name="type" class="form-select">
+                <option>VIDEO</option>
+                <option>TEXT</option>
+                <option>FILE</option>
+              </select>
+            </div>
+            <div class="col-md-9">
+              <input name="contentUrl" class="form-control" placeholder="Video / file link (https://...)">
+              <textarea name="text" rows="3" class="form-control d-none" placeholder="Lesson text"></textarea>
+            </div>
+            <div class="col-md-3">
+              <input name="minutes" type="number" min="0" value="10" class="form-control" placeholder="Minutes">
+            </div>
+            <div class="col-12 d-flex justify-content-between align-items-center">
+              <label class="form-check"><input name="preview" type="checkbox" class="form-check-input"> <span class="form-check-label">Free preview</span></label>
+              <button class="btn btn-primary"><i class="bi bi-plus-lg"></i> Add lesson</button>
+            </div>
+          </form>
+          <p class="small text-secondary mt-3 mb-0">Each section can have one quiz. Use Add quiz / Edit quiz next to the section title.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quiz editor (opens from the curriculum modal) -->
+  <div class="modal fade" id="quizModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+      <form class="modal-content glass" id="quizForm">
+        <div class="modal-header"><h5 class="modal-title" id="qzHead">Quiz</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="row g-2 mb-3">
+            <div class="col-md-6"><label class="form-label">Quiz title</label><input id="qzTitle" class="form-control" maxlength="150" required></div>
+            <div class="col-6 col-md-3"><label class="form-label">Pass score %</label><input id="qzPass" type="number" min="1" max="100" class="form-control" required></div>
+            <div class="col-6 col-md-3"><label class="form-label">Max attempts <small class="text-secondary">(0 = unlimited)</small></label><input id="qzMax" type="number" min="0" class="form-control"></div>
+          </div>
+          <div id="qzList"></div>
+          <button type="button" class="btn btn-outline-light btn-sm" id="qzAdd"><i class="bi bi-plus-lg"></i> Add question</button>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-danger me-auto d-none" id="qzDelete"><i class="bi bi-trash"></i> Delete quiz</button><button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary">Save quiz</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    if (guard('ADMIN')) (async () => {
+      let courses = [], cats = [], staff = [], editing = null, curId = null, tab = 'courses', logRows = [];
+
+      /* ---------- log definitions: row() returns plain strings (also used for CSV); badge = index of the action column ---------- */
+      const BADGE = { REGISTERED: 'primary', LOGIN: 'success', LOGIN_FAILED: 'danger', LOGIN_BLOCKED: 'warning text-dark', PASSWORD_CHANGED: 'info text-dark', ROLE_CHANGED: 'info text-dark', LOCKED: 'danger', UNLOCKED: 'success', ENROLLED: 'success', UNENROLLED: 'secondary', COMPLETED: 'success', PAID: 'success' };
+      const LOGS = {
+        account: { title: 'Account logs', head: ['Time', 'Action', 'User', 'Email', 'Detail', 'By'], badge: 1, row: l => [fmt(l.createdAt), l.action, l.userName, l.email, l.detail, l.actor] },
+        payment: { title: 'Payment logs', head: ['Time', 'User', 'Email', 'Course', 'Amount', 'Method'], badge: -1, row: l => [fmt(l.createdAt), l.userName, l.email, l.courseTitle, money(l.amount), l.method] },
+        enrollment: { title: 'Enrollment logs', head: ['Time', 'Action', 'User', 'Email', 'Course'], badge: 1, row: l => [fmt(l.createdAt), l.action, l.userName, l.email, l.courseTitle] },
+        completion: { title: 'Completion logs', head: ['Time', 'User', 'Email', 'Course', 'Result'], badge: -1, row: l => [fmt(l.createdAt), l.userName, l.email, l.courseTitle, l.detail || 'Completed'] }
+      };
+
+      /* ---------- stats ---------- */
+      async function loadStats() {
+        const s = await api('/admin/stats');
+        const items = [['Users', s.users, 'people'], ['Courses', s.courses, 'journal-richtext'], ['Published', s.published, 'broadcast'], ['Pending', s.pending, 'hourglass-split'], ['Enrollments', s.enrollments, 'person-plus'], ['Reviews', s.reviews, 'star'], ['Open tickets', s.openTickets, 'life-preserver']];
+        const tb = $('#tkBadge'); tb.textContent = s.openTickets; tb.classList.toggle('d-none', !s.openTickets);
+        $('#stats').innerHTML = items.map(([k, v, i]) => `<div class="col-6 col-md-4 col-xl"><div class="admin-stat glass"><i class="bi bi-${i} text-secondary"></i><b>${v}</b><small>${k}</small></div></div>`).join('');
+      }
+
+      /* ---------- courses ---------- */
+      async function loadCourses() {
+        [courses, cats, staff] = await Promise.all([api('/admin/courses'), api('/categories'), api('/admin/users')]);
+        staff = staff.filter(u => u.role === 'ADMIN' || u.author); // who can be shown as a course's instructor: admins and course authors
+        renderCourses();
+      }
+      function renderCourses() {
+        const q = $('#cSearch').value.trim().toLowerCase(), st = $('#cStatus').value;
+        const list = courses.filter(c => (!st || c.status === st) && (!q || (c.title + ' ' + c.instructor.fullName).toLowerCase().includes(q)));
+        $('#cCount').textContent = list.length + ' of ' + courses.length + ' courses';
+        $('#cBody').innerHTML = list.length ? list.map(c => `<tr>
+          <td>${imgTag(c, 'admin-thumb')}</td>
+          <td><a class="text-reset fw-semibold" href="course.html?id=${c.courseId}">${esc(c.title)}</a><div class="small text-secondary">${esc(c.level)} · ${c.lessonCount} lessons</div></td>
+          <td>${esc(c.category)}</td>
+          <td>${esc(c.instructor.fullName)}</td>
+          <td class="text-nowrap">${money(c.price)}</td>
+          <td>${c.enrolledCount}</td>
+          <td>${statusBadge(c.status)}</td>
+          <td class="text-end text-nowrap">
+            ${c.status === 'PENDING' ? `<button class="btn btn-sm btn-success" data-act="approve" data-id="${c.courseId}" title="Approve"><i class="bi bi-check-lg"></i></button>
+            <button class="btn btn-sm btn-outline-warning" data-act="reject" data-id="${c.courseId}" title="Reject"><i class="bi bi-x-lg"></i></button>` : ''}
+            <button class="btn btn-sm btn-outline-light" data-act="curriculum" data-id="${c.courseId}" title="Sections, lessons and quizzes"><i class="bi bi-list-nested"></i></button>
+            <button class="btn btn-sm btn-outline-light" data-act="edit" data-id="${c.courseId}" title="Edit"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-sm btn-outline-danger" data-act="delete" data-id="${c.courseId}" title="Delete"><i class="bi bi-trash"></i></button>
+          </td></tr>`).join('') : '<tr><td colspan="8" class="text-center text-secondary py-4">No courses match.</td></tr>';
+      }
+      $('#cSearch').oninput = $('#cStatus').onchange = renderCourses;
+
+      const form = $('#courseForm'), cModal = bootstrap.Modal.getOrCreateInstance($('#courseModal'));
+      const syncReject = () => $('#rejectBox').classList.toggle('d-none', form.status.value !== 'REJECTED');
+      form.status.onchange = syncReject;
+      function openCourse(c, status) {
+        editing = c || null;
+        $('#cmTitle').textContent = c ? 'Edit course' : 'Add course';
+        form.categoryId.innerHTML = cats.map(k => `<option value="${k.categoryId}">${esc(k.name)}</option>`).join('');
+        form.instructorId.innerHTML = staff.map(u => `<option value="${u.userId}">${esc(u.fullName)} (${u.role === 'ADMIN' ? 'admin' : 'instructor'})</option>`).join('');
+        form.title.value = c?.title || ''; form.categoryId.value = c?.categoryId ?? cats[0]?.categoryId; form.level.value = c?.level || 'Beginner'; form.price.value = c?.price ?? 0;
+        form.instructorId.value = c?.instructor.userId ?? state.user.userId; form.status.value = status || c?.status || 'PUBLISHED';
+        form.rejectReason.value = c?.rejectReason || ''; form.imageUrl.value = c?.imageUrl || ''; form.description.value = c?.description || '';
+        syncReject(); cModal.show();
+      }
+      form.onsubmit = async e => {
+        e.preventDefault();
+        const b = formData(form); b.price = +b.price; b.categoryId = +b.categoryId; b.instructorId = +b.instructorId;
+        try {
+          await api(editing ? '/admin/courses/' + editing.courseId : '/admin/courses', editing ? 'PUT' : 'POST', b);
+          cModal.hide(); toast(editing ? 'Course updated' : 'Course added'); await Promise.all([loadCourses(), loadStats()]);
+        } catch (x) { toast(x.message || 'Could not save the course', 'danger'); }
+      };
+
+      $('#pane-courses').addEventListener('click', async e => {
+        const b = e.target.closest('[data-act]'); if (!b) return;
+        const act = b.dataset.act, c = courses.find(x => x.courseId === +b.dataset.id);
+        try {
+          if (act === 'add') openCourse(null);
+          else if (act === 'edit') openCourse(c);
+          else if (act === 'reject') openCourse(c, 'REJECTED');
+          else if (act === 'curriculum') openCurriculum(c);
+          else if (act === 'approve') { await api('/admin/courses/' + c.courseId + '/approve', 'POST'); toast('Course approved and published'); await Promise.all([loadCourses(), loadStats()]); }
+          else if (act === 'delete') {
+            const extra = c.enrolledCount ? ' This also removes ' + c.enrolledCount + ' enrollment(s), their progress and reviews.' : '';
+            if (!await confirmBox('Delete "' + c.title + '"?' + extra + ' This cannot be undone.', { title: 'Delete course', confirmText: 'Delete' })) return;
+            await api('/admin/courses/' + c.courseId, 'DELETE'); toast('Course deleted'); await Promise.all([loadCourses(), loadStats()]);
+          }
+        } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      });
+
+      /* ---------- curriculum ---------- */
+      const cur = bootstrap.Modal.getOrCreateInstance($('#currModal')), secForm = $('#secForm'), lesForm = $('#lesForm');
+      async function openCurriculum(c) {
+        if (c) { curId = c.courseId; $('#curTitle').textContent = 'Curriculum · ' + c.title; cur.show(); }
+        const full = curFull = await api('/instructor/courses/' + curId);
+        $('#curBody').innerHTML = full.sections.length ? full.sections.map(s => `<div class="mb-3">
+          <div class="d-flex justify-content-between align-items-center"><b>${esc(s.title)}</b>${s.quiz ? '<span class="badge bg-info text-dark">quiz</span>' : ''}
+          <span class="text-nowrap"><button class="btn btn-sm btn-outline-info" data-cquiz="${s.sectionId}"><i class="bi bi-patch-question"></i> ${s.quiz ? 'Edit quiz' : 'Add quiz'}</button>
+          <button class="btn btn-sm btn-outline-danger" data-cdel="section" data-id="${s.sectionId}"><i class="bi bi-trash"></i></button></span></div>
+          ${s.lessons.length ? s.lessons.map(l => `<div class="d-flex justify-content-between align-items-center border-top py-1 small">
+            <span><span class="badge bg-secondary me-1">${l.type}</span>${esc(l.title)} <span class="text-secondary">· ${l.minutes} min${l.preview ? ' · preview' : ''}</span></span>
+            <button class="btn btn-sm btn-link text-danger" data-cdel="lesson" data-id="${l.lessonId}"><i class="bi bi-x-lg"></i></button></div>`).join('') : '<div class="small text-secondary border-top py-1">No lessons yet.</div>'}</div>`).join('') : '<p class="text-secondary">No sections yet. Add one below.</p>';
+        lesForm.sectionId.innerHTML = full.sections.map(s => `<option value="${s.sectionId}">${esc(s.title)}</option>`).join('');
+      }
+      $('#curBody').addEventListener('click', async e => {
+        const q = e.target.closest('[data-cquiz]'); if (q) return openQuiz(curFull.sections.find(s => s.sectionId === +q.dataset.cquiz));
+        const b = e.target.closest('[data-cdel]'); if (!b) return;
+        if (!await confirmBox('Delete this ' + b.dataset.cdel + '?', { title: 'Delete ' + b.dataset.cdel, confirmText: 'Delete' })) return;
+        try { await api('/' + b.dataset.cdel + 's/' + b.dataset.id, 'DELETE'); await openCurriculum(); } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      });
+      secForm.onsubmit = async e => {
+        e.preventDefault();
+        try { await api('/courses/' + curId + '/sections', 'POST', { title: secForm.title.value }); secForm.reset(); await openCurriculum(); } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      };
+      lesForm.type.onchange = () => { const t = lesForm.type.value === 'TEXT'; lesForm.text.classList.toggle('d-none', !t); lesForm.contentUrl.classList.toggle('d-none', t); };
+      lesForm.onsubmit = async e => {
+        e.preventDefault();
+        if (!lesForm.sectionId.value) return toast('Add a section first', 'warning');
+        const b = formData(lesForm); b.minutes = +b.minutes || 0; b.preview = lesForm.preview.checked;
+        try { await api('/sections/' + b.sectionId + '/lessons', 'POST', b); lesForm.title.value = ''; lesForm.contentUrl.value = ''; lesForm.text.value = ''; toast('Lesson added'); await openCurriculum(); } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      };
+      $('#currModal').addEventListener('hidden.bs.modal', loadCourses);
+
+      /* ---------- quiz editor (per section) ---------- */
+      let qz = null, curFull = null;
+      const quizModal = bootstrap.Modal.getOrCreateInstance($('#quizModal'));
+      const blankQ = () => ({ text: '', options: [{ text: '', correct: true }, { text: '', correct: false }] });
+      function openQuiz(s) {
+        const q = s.quiz;
+        qz = { sectionId: s.sectionId, exists: !!q, questions: q ? q.questions.map(x => ({ text: x.text, options: x.options.map(o => ({ text: o.text, correct: !!o.correct })) })) : [blankQ()] };
+        $('#qzHead').textContent = 'Quiz · ' + s.title; $('#qzTitle').value = q?.title || s.title + ' quiz'; $('#qzPass').value = q?.passScore ?? 70; $('#qzMax').value = q?.maxAttempts ?? 0;
+        $('#qzDelete').classList.toggle('d-none', !qz.exists); drawQuiz(); quizModal.show();
+      }
+      function drawQuiz() {
+        $('#qzList').innerHTML = qz.questions.map((q, i) => `<div class="q-card"><div class="d-flex gap-2 mb-2"><input class="form-control" data-q="${i}" data-f="text" placeholder="Question ${i + 1}" value="${esc(q.text)}" maxlength="300">
+          <button type="button" class="btn btn-outline-danger btn-sm" data-qa="delq" data-q="${i}" ${qz.questions.length < 2 ? 'disabled' : ''}><i class="bi bi-trash"></i></button></div>
+          ${q.options.map((o, j) => `<div class="opt-row"><input type="radio" class="form-check-input mt-0" name="ok${i}" data-qa="ok" data-q="${i}" data-o="${j}" ${o.correct ? 'checked' : ''} title="Correct answer">
+            <input class="form-control form-control-sm" data-q="${i}" data-o="${j}" data-f="otext" placeholder="Option ${j + 1}" value="${esc(o.text)}" maxlength="200">
+            <button type="button" class="btn btn-sm btn-link text-danger" data-qa="delo" data-q="${i}" data-o="${j}" ${q.options.length < 3 ? 'disabled' : ''}><i class="bi bi-x-lg"></i></button></div>`).join('')}
+          <button type="button" class="btn btn-sm btn-outline-light" data-qa="addo" data-q="${i}" ${q.options.length >= 4 ? 'disabled' : ''}><i class="bi bi-plus"></i> Option</button></div>`).join('');
+      }
+      $('#qzList').addEventListener('input', e => { const t = e.target, i = t.dataset.q; if (t.dataset.f === 'text') qz.questions[i].text = t.value; else if (t.dataset.f === 'otext') qz.questions[i].options[t.dataset.o].text = t.value; });
+      $('#qzList').addEventListener('click', e => {
+        const b = e.target.closest('[data-qa]'); if (!b) return; const a = b.dataset.qa, i = +b.dataset.q, o = +b.dataset.o;
+        if (a === 'ok') { qz.questions[i].options.forEach((x, k) => x.correct = k === o); return; }
+        if (a === 'addo') qz.questions[i].options.push({ text: '', correct: false });
+        else if (a === 'delo') { const was = qz.questions[i].options[o].correct; qz.questions[i].options.splice(o, 1); if (was) qz.questions[i].options[0].correct = true; }
+        else if (a === 'delq') qz.questions.splice(i, 1);
+        drawQuiz();
+      });
+      $('#qzAdd').onclick = () => { qz.questions.push(blankQ()); drawQuiz(); };
+      $('#quizForm').onsubmit = async e => {
+        e.preventDefault();
+        try {
+          await api('/sections/' + qz.sectionId + '/quiz', 'PUT', { title: $('#qzTitle').value, passScore: +$('#qzPass').value, maxAttempts: +$('#qzMax').value || 0, questions: qz.questions });
+          quizModal.hide(); toast('Quiz saved'); await openCurriculum();
+        } catch (x) { toast(x.message || 'Could not save the quiz', 'danger'); }
+      };
+      $('#qzDelete').onclick = async () => {
+        if (!await confirmBox('Delete this quiz? Students lose their attempts for it.', { title: 'Delete quiz', confirmText: 'Delete' })) return;
+        try { await api('/sections/' + qz.sectionId + '/quiz', 'DELETE'); quizModal.hide(); toast('Quiz deleted', 'info'); await openCurriculum(); } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      };
+
+      /* ---------- logs ---------- */
+      async function loadLogs() {
+        const def = LOGS[tab];
+        try { logRows = (await api('/admin/logs/' + tab)).map(l => ({ cells: def.row(l).map(v => v ?? '') })); } catch (x) { logRows = []; toast(x.message || 'Could not load logs', 'danger'); }
+        $('#lTitle').textContent = def.title;
+        $('#lHead').innerHTML = '<tr>' + def.head.map(h => `<th>${h}</th>`).join('') + '</tr>';
+        const acts = def.badge >= 0 ? [...new Set(logRows.map(r => r.cells[def.badge]))].sort() : [];
+        $('#lAction').classList.toggle('d-none', def.badge < 0);
+        $('#lAction').innerHTML = '<option value="">All actions</option>' + acts.map(a => `<option>${esc(a)}</option>`).join('');
+        $('#lSearch').value = '';
+        renderLogs();
+      }
+      const visibleLogs = () => {
+        const def = LOGS[tab], q = $('#lSearch').value.trim().toLowerCase(), a = def.badge >= 0 ? $('#lAction').value : '';
+        return logRows.filter(r => (!a || r.cells[def.badge] === a) && (!q || r.cells.join(' ').toLowerCase().includes(q)));
+      };
+      function renderLogs() {
+        const def = LOGS[tab], rows = visibleLogs();
+        $('#lCount').textContent = rows.length + ' of ' + logRows.length + ' entries';
+        $('#lBody').innerHTML = rows.length ? rows.map(r => '<tr>' + r.cells.map((v, i) => i === def.badge ? `<td><span class="badge bg-${BADGE[v] || 'secondary'}">${esc(v)}</span></td>` : `<td>${esc(v) || '<span class="text-secondary">—</span>'}</td>`).join('') + '</tr>').join('')
+          : `<tr><td colspan="${def.head.length}" class="text-center text-secondary py-4">No entries yet. They appear here as users register, log in, pay, enroll and finish courses.</td></tr>`;
+      }
+      $('#lSearch').oninput = $('#lAction').onchange = renderLogs;
+      $('#lRefresh').onclick = () => loadLogs();
+      $('#lCsv').onclick = () => {
+        const def = LOGS[tab], safe = v => { v = String(v ?? ''); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+        const text = '\ufeff' + [def.head, ...visibleLogs().map(r => r.cells)].map(r => r.map(safe).join(',')).join('\r\n');
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' })); a.download = tab + '-logs.csv'; a.click(); URL.revokeObjectURL(a.href);
+      };
+
+      /* ---------- support tickets ---------- */
+      const TOPIC = { PAYMENT: 'Payment', COURSE: 'Course', ACCOUNT: 'Account', OTHER: 'Other' }, tkModal = bootstrap.Modal.getOrCreateInstance($('#ticketModal'));
+      let tickets = [], tk = null;
+      async function loadTickets() {
+        try { tickets = await api('/admin/tickets'); } catch (x) { tickets = []; toast(x.message || 'Could not load support requests', 'danger'); }
+        renderTickets();
+      }
+      function renderTickets() {
+        const q = $('#tSearch').value.trim().toLowerCase(), st = $('#tStatus').value;
+        const list = tickets.filter(t => (!st || t.status === st) && (!q || [t.name, t.email, t.subject, t.message, t.courseTitle].join(' ').toLowerCase().includes(q)));
+        $('#tCount').textContent = list.length + ' of ' + tickets.length + ' requests';
+        $('#tBody').innerHTML = list.length ? list.map(t => `<tr>
+          <td class="text-nowrap">${fmt(t.createdAt)}</td>
+          <td>${esc(t.name)}${t.userId ? '' : ' <span class="badge bg-secondary">guest</span>'}<div class="small text-secondary">${esc(t.email)}</div></td>
+          <td>${TOPIC[t.category]}</td>
+          <td><b>${esc(t.subject)}</b>${t.courseTitle ? `<div class="small text-secondary">${esc(t.courseTitle)}</div>` : ''}</td>
+          <td><span class="badge bg-${t.status === 'OPEN' ? 'warning text-dark' : 'success'}">${t.status}</span>${t.reply ? ' <i class="bi bi-reply-fill text-secondary" title="Replied"></i>' : ''}</td>
+          <td class="text-end"><button class="btn btn-sm btn-outline-light" data-tid="${t.ticketId}">Open</button></td></tr>`).join('')
+          : '<tr><td colspan="6" class="text-center text-secondary py-4">No support requests here.</td></tr>';
+      }
+      $('#tSearch').oninput = $('#tStatus').onchange = renderTickets;
+      $('#tRefresh').onclick = loadTickets;
+      $('#tBody').addEventListener('click', e => {
+        const b = e.target.closest('[data-tid]'); if (!b) return;
+        tk = tickets.find(t => t.ticketId === +b.dataset.tid);
+        $('#tkSubject').textContent = tk.subject;
+        $('#tkMeta').textContent = tk.name + ' <' + tk.email + '> · ' + TOPIC[tk.category] + (tk.courseTitle ? ' · ' + tk.courseTitle : '') + ' · ' + fmt(tk.createdAt);
+        $('#tkMsg').textContent = tk.message;
+        $('#tkPrev').classList.toggle('d-none', !tk.reply); $('#tkPrev').textContent = tk.reply ? 'Last reply (' + fmt(tk.repliedAt) + '): ' + tk.reply : '';
+        $('#tkReply').value = ''; $('#tkReopen').classList.toggle('d-none', tk.status !== 'RESOLVED'); $('#tkResolve').classList.toggle('d-none', tk.status === 'RESOLVED');
+        tkModal.show();
+      });
+      async function saveTicket(status, needReply) {
+        const reply = $('#tkReply').value.trim(); if (needReply && !reply) return toast('Write a reply first', 'warning');
+        try { await api('/admin/tickets/' + tk.ticketId, 'PUT', { reply, status }); tkModal.hide(); toast(status === 'RESOLVED' ? 'Request resolved' : reply ? 'Reply sent' : 'Request reopened'); await Promise.all([loadTickets(), loadStats()]); } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      }
+      $('#tkSend').onclick = () => saveTicket(tk.status, true);
+      $('#tkResolve').onclick = () => saveTicket('RESOLVED', false);
+      $('#tkReopen').onclick = () => saveTicket('OPEN', false);
+
+      /* ---------- tabs ---------- */
+      $('#tabs').addEventListener('click', e => {
+        const b = e.target.closest('[data-tab]'); if (!b) return;
+        tab = b.dataset.tab; $$('#tabs .nav-link').forEach(x => x.classList.toggle('active', x === b));
+        $('#pane-courses').classList.toggle('d-none', tab !== 'courses'); $('#pane-support').classList.toggle('d-none', tab !== 'support'); $('#pane-logs').classList.toggle('d-none', tab === 'courses' || tab === 'support');
+        if (tab === 'courses') loadCourses(); else if (tab === 'support') loadTickets(); else loadLogs();
+      });
+
+      try { await Promise.all([loadStats(), loadCourses()]); } catch (x) { toast(x.message || 'Could not load the admin data', 'danger'); }
+    })();
+  </script>
+</body>
+
+</html>
