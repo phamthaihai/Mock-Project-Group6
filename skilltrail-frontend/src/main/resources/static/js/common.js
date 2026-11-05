@@ -549,6 +549,20 @@ function mock(method, path, body) {
       log('ACCOUNT', 'LOGIN', { user: u, actor: u.fullName, detail: 'Email and password' });
       return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
+    if (R('POST', /^\/auth\/forgot-password$/)) { // real server: email a 6-digit code/link and return only {message}. Mock has no mailbox, so it also returns demoCode
+      const email = (body?.email || '').trim().toLowerCase(); need(/^\S+@\S+\.\S+$/.test(email), 'Enter a valid email');
+      const u = db.users.find(x => x.email.toLowerCase() === email && !x.locked); db.resets = (db.resets || []).filter(r => r.email !== email && r.expires > Date.now());
+      const msg = 'If that email is registered, a reset code has been sent.'; if (!u) return { message: msg };
+      const code = String(Math.floor(100000 + Math.random() * 900000)); db.resets.push({ email, code, expires: Date.now() + 10 * 60000, tries: 0 });
+      log('ACCOUNT', 'RESET_REQUESTED', { user: u, actor: u.fullName, detail: 'Forgot password' }); return { message: msg, demoCode: code };
+    }
+    if (R('POST', /^\/auth\/reset-password$/)) {
+      const { email = '', code = '', newPassword = '' } = body || {}, e = email.trim().toLowerCase(); need(newPassword.length >= 6, 'Password must be at least 6 characters');
+      const r = (db.resets || []).find(x => x.email === e), u = db.users.find(x => x.email.toLowerCase() === e);
+      if (!r || !u || r.expires < Date.now()) err(400, 'Reset code is invalid or expired');
+      if (r.code !== String(code).trim()) { if (++r.tries >= 5) db.resets = db.resets.filter(x => x !== r); localStorage.setItem('db6', JSON.stringify(db)); err(400, 'Reset code is invalid or expired'); }
+      u.password = newPassword; db.resets = db.resets.filter(x => x !== r); log('ACCOUNT', 'PASSWORD_RESET', { user: u, actor: u.fullName, detail: 'Forgot password' }); return null;
+    }
     if (R('POST', /^\/auth\/google$/)) {
       let g; try { g = decodeJwt(body.credential); } catch { err(401, 'Invalid Google sign-in token'); }
       need(g.email && g.email_verified !== false, 'Your Google email address is not verified');

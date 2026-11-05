@@ -8,6 +8,8 @@ The front-end mock (`js/common.js`, function `mock`) returns exactly these shape
 |---|---|---|---|
 | POST | /auth/register | public | `{fullName,email,password}` -> new STUDENT. 400 invalid, 409 email exists |
 | POST | /auth/login | public | `{email,password}` -> `{token, user:{userId,fullName,email,role}}`. 401 wrong, 403 locked |
+| POST | /auth/forgot-password | public | `{email}` -> `{message}`. Always 200 with the same message (do not reveal whether the email exists). Email a 6-digit code valid 10 min |
+| POST | /auth/reset-password | public | `{email,code,newPassword}` -> 204. 400 if code wrong/expired or password < 6 chars. Limit 5 wrong tries per code, store the code hashed |
 | GET / PUT | /users/me | any | `{userId,fullName,email,role,locked}` / body `{fullName}` |
 | PUT | /users/me/password | any | `{currentPassword,newPassword}` 400 if wrong. If the account has no password yet (Google sign-up), `currentPassword` is not required; `GET /users/me` should return `hasPassword` (boolean) |
 | GET / POST | /notifications/me, /notifications/read | any | `[{notificationId,message,link,read,createdAt}]`, POST marks all read |
