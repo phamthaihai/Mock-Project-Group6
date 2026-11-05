@@ -631,8 +631,8 @@ function mock(method, path, body) {
       };
     }
     if (R('POST', /^\/quizzes\/(\d+)\/attempts$/)) {
-      const { c, q } = findQuiz(m[1]); if (!enrolledIn(c.courseId)) err(403, 'Enroll in this course to take the quiz');
-      const used = db.attempts.filter(a => a.quizId === q.quizId && a.userId === uid).length; if (q.maxAttempts > 0 && used >= q.maxAttempts) err(409, 'You have used all attempts for this quiz');
+      const { c, q } = findQuiz(m[1]); if (!(admin || own(c) || enrolledIn(c.courseId))) err(403, 'Enroll in this course to take the quiz'); // same rule as opening the quiz (admins can test any quiz)
+      const used = db.attempts.filter(a => a.quizId === q.quizId && a.userId === uid).length; if (!admin && q.maxAttempts > 0 && used >= q.maxAttempts) err(409, 'You have used all attempts for this quiz');
       const ans = body.answers || {}; need(q.questions.every(x => ans[x.questionId] != null), 'Answer every question before submitting');
       const correct = {}; let ok = 0; q.questions.forEach(x => { const co = x.options.find(o => o.correct); correct[x.questionId] = co.optionId; if (+ans[x.questionId] === co.optionId) ok++; });
       const was = progress(c).percent, score = Math.round(ok / q.questions.length * 100), passed = score >= q.passScore; db.attempts.push({ attemptId: ++db.aid, quizId: q.quizId, userId: uid, score, passed, createdAt: now() });

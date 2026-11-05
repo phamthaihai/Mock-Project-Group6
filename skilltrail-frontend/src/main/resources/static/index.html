@@ -117,35 +117,12 @@
             <div id="grid" class="row g-4"></div>
         </section>
 
-        <section class="container py-5">
-            <div class="section-title"><small>Simple</small>
-                <h2>How It Works</h2>
+        <section id="toprated" class="container py-5">
+            <div class="section-title"><small>Top picks</small>
+                <h2>Top Rated Courses</h2>
             </div>
-            <div class="row g-4 text-center">
-                <div class="col-md-4">
-                    <div class="glass p-4 h-100">
-                        <div class="step-icon"><i class="bi bi-search"></i></div>
-                        <h5>1. Find a course</h5>
-                        <p class="text-secondary mb-0">Search by topic or filter by category, level and rating.</p>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="glass p-4 h-100">
-                        <div class="step-icon"><i class="bi bi-bag-check"></i></div>
-                        <h5>2. Enroll</h5>
-                        <p class="text-secondary mb-0">Create a free account and enroll in one click, or buy a paid
-                            course.</p>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="glass p-4 h-100">
-                        <div class="step-icon"><i class="bi bi-trophy"></i></div>
-                        <h5>3. Learn and progress</h5>
-                        <p class="text-secondary mb-0">Complete lessons at your pace and track progress from your
-                            dashboard.</p>
-                    </div>
-                </div>
-            </div>
+            <div id="topGrid" class="row g-4"></div>
+            <div class="text-center mt-4"><a href="#courses" class="btn btn-outline-light">Browse all courses</a></div>
         </section>
 
         <section class="container py-4">
@@ -163,6 +140,32 @@
                 </div>
                 <p class="text-secondary text-center mx-auto mb-4" style="max-width:640px">SkillTrail connects students with practical, expert-led
                     courses. Find quick answers below, or send us a request in the Support section.</p>
+                <h3 class="h5 text-center mb-3">How it works</h3>
+                    <div class="row g-4 text-center mb-5">
+                        <div class="col-md-4">
+                            <div class="glass p-4 h-100">
+                                <div class="step-icon"><i class="bi bi-search"></i></div>
+                                <h5>1. Find a course</h5>
+                                <p class="text-secondary mb-0">Search by topic or filter by category, level and rating.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="glass p-4 h-100">
+                                <div class="step-icon"><i class="bi bi-bag-check"></i></div>
+                                <h5>2. Enroll</h5>
+                                <p class="text-secondary mb-0">Create a free account and enroll in one click, or buy a paid
+                                    course.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="glass p-4 h-100">
+                                <div class="step-icon"><i class="bi bi-trophy"></i></div>
+                                <h5>3. Learn and progress</h5>
+                                <p class="text-secondary mb-0">Complete lessons at your pace and track progress from your
+                                    dashboard.</p>
+                            </div>
+                        </div>
+                    </div>
                 <ul class="nav nav-pills justify-content-center mb-4" id="faqTabs">
                     <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#faqStudents"><i class="bi bi-mortarboard"></i> For students</button></li>
                     <li class="nav-item d-none" id="faqAdminTab"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#faqAdmins"><i class="bi bi-shield-lock"></i> For admins</button></li>
@@ -180,7 +183,16 @@
         </section>
 
         <section id="support" class="container py-5">
-            <div class="glass p-4 p-md-5">
+            <div class="glass p-4 p-md-5 d-none" id="supportAdmin">
+                <div class="section-title mb-4"><small>For admins</small>
+                    <h2>Support inbox</h2>
+                </div>
+                <div class="row g-3 text-center mb-4" id="spStats"></div>
+                <h5 class="mb-3"><i class="bi bi-inbox"></i> Latest open requests</h5>
+                <div id="spLatest"></div>
+                <div class="text-center mt-4"><a href="admin.html#support" class="btn btn-primary px-4"><i class="bi bi-life-preserver"></i> Open support inbox</a></div>
+            </div>
+            <div class="glass p-4 p-md-5" id="supportStudent">
                 <div class="section-title mb-4"><small>We read every message</small>
                     <h2>Support</h2>
                 </div>
@@ -290,7 +302,18 @@
             e.preventDefault(); const b = formData(e.target); b.courseId = b.courseId ? +b.courseId : null;
             try { await api('/support', 'POST', b); e.target.reset(); toast('Request sent. Replies appear under My requests.'); loadTickets(); } catch (x) { toast(x.message || 'Could not send the request', 'danger'); }
         };
-        loadTickets();
+        /* Admins do not send requests, they answer them: show the inbox summary instead of the request form */
+        async function loadAdminSupport() {
+            $('#supportStudent').classList.add('d-none'); $('#supportAdmin').classList.remove('d-none');
+            try {
+                const all = await api('/admin/tickets'), open = all.filter(t => t.status === 'OPEN');
+                $('#spStats').innerHTML = [['Open', open.length, 'warning'], ['Resolved', all.length - open.length, 'success'], ['All requests', all.length, 'info']]
+                    .map(([l, n, c]) => `<div class="col-4"><div class="glass p-3 h-100"><div class="fs-2 fw-bold text-${c}">${n}</div><div class="small text-secondary">${l}</div></div></div>`).join('');
+                $('#spLatest').innerHTML = open.length ? open.slice(0, 5).map(t => `<a href="admin.html#support" class="glass p-3 mb-2 d-block text-reset text-decoration-none"><div class="d-flex justify-content-between gap-2"><b>${esc(t.subject)}</b><span class="small text-secondary text-nowrap">${fmt(t.createdAt)}</span></div>
+                    <div class="small text-secondary">${esc(t.name)}${t.userId ? '' : ' (guest)'} · ${TOPIC[t.category]}${t.courseTitle ? ' · ' + esc(t.courseTitle) : ''}</div></a>`).join('') : '<p class="text-secondary mb-0">No open requests. You are all caught up.</p>';
+            } catch (x) { $('#spLatest').innerHTML = '<p class="text-secondary mb-0">Could not load support requests.</p>'; }
+        }
+        if (state.user?.role === 'ADMIN') loadAdminSupport(); else loadTickets();
         (async () => {
             try {
                 const [cats, cs] = await Promise.all([api('/categories'), api('/courses')]); courses = cs;
@@ -302,6 +325,7 @@
             countUp($('#s2'), courses.reduce((t, c) => t + c.enrolledCount, 0));
             countUp($('#s3'), new Set(courses.map(c => c.instructor.userId)).size);
             render();
+            $('#topGrid').innerHTML = [...courses].sort((a, b) => b.rating - a.rating || b.enrolledCount - a.enrolledCount).slice(0, 3).map(c => card(c, mine.has(c.courseId))).join('');
         })();
     </script>
 </body>

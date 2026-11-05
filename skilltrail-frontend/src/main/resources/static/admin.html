@@ -569,6 +569,7 @@
       });
 
       try { await Promise.all([loadStats(), loadCourses()]); } catch (x) { toast(x.message || 'Could not load the admin data', 'danger'); }
+      if (location.hash === '#support') $('#tabs [data-tab="support"]').click(); // linked from the home page support inbox
     })();
   </script>
 </body>
