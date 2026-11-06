@@ -1,16 +1,16 @@
--- LearnPath (online course and student progress platform) - SQL Server (T-SQL)
--- Run this whole script in SSMS. It creates a fresh LearnPath database (the old LearnHub database is not touched).
+-- SkillTrail (online course and student progress platform) - SQL Server (T-SQL)
+-- Run this whole script in SSMS. It creates a fresh SkillTrail database (any other existing database is not touched).
 USE master;
 GO
-IF DB_ID('LearnPath') IS NOT NULL
+IF DB_ID('SkillTrail') IS NOT NULL
 BEGIN
-  ALTER DATABASE LearnPath SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-  DROP DATABASE LearnPath;
+  ALTER DATABASE SkillTrail SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+  DROP DATABASE SkillTrail;
 END
 GO
-CREATE DATABASE LearnPath;
+CREATE DATABASE SkillTrail;
 GO
-USE LearnPath;
+USE SkillTrail;
 GO
 CREATE TABLE Users(
   UserId INT IDENTITY(1,1) PRIMARY KEY,

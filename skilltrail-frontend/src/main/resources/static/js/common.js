@@ -1,6 +1,6 @@
 /* ===== CONFIG: set USE_MOCK=false when the Spring Boot backend is ready ===== */
 const CONFIG = {
-  USE_MOCK: localStorage.getItem('learnpath-mode') !== 'live', API_BASE: '/api',
+  USE_MOCK: localStorage.getItem('skilltrail-mode') !== 'live', API_BASE: '/api',
   // Google sign-in: paste your OAuth "Web application" Client ID here (Google Cloud Console > APIs & Services > Credentials).
   // Leave empty to use the demo dialog in Mock mode. A Client ID is public, it is safe to commit; never commit the client SECRET.
   GOOGLE_CLIENT_ID: '387986591955-kkcc9gpidmqiam05l6ash61vfl5sh27v.apps.googleusercontent.com'
@@ -305,7 +305,7 @@ function seed(oldUsers) {
   const account = (email, fullName, role, pw = '123456') => { let u = users.find(x => x.email === email); if (!u) users.push(u = { userId: ++maxId, fullName, email, password: pw, role, locked: false }); return u; };
   // course authors: the teacher shown on a course. They are profiles only (no login, no role), not accounts people sign in with
   const author = (email, fullName) => { const u = account(email, fullName, 'STUDENT'); u.author = true; u.locked = true; return u; };
-  const admin = account('admin@learnpath.com', 'Admin', 'ADMIN', 'admin123');
+  const admin = account('admin@skilltrail.com', 'Admin', 'ADMIN', 'admin123');
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const raw = [
     {
@@ -437,14 +437,14 @@ function seed(oldUsers) {
   };
   const sections = (cur, title) => { let n = 0; const s = cur.map((x, i) => { const [st, ls] = x.split('::'); return { sectionId: ++sid, title: st, position: i + 1, quiz: null, lessons: ls.split(';').map(l => { const [t, m] = l.split('|'); return lesson(t, +m, n++, title); }) }; }); s[0].lessons[0].preview = true; return s; };
   const courses = raw.map((r, i) => {
-    const inst = author(r.instructor === 'Nguyen Van An' ? 'instructor@learnpath.com' : slug(r.instructor).replace(/-/g, '.') + '@learnpath.com', r.instructor), secs = sections(r.cur, r.title);
+    const inst = author(r.instructor === 'Nguyen Van An' ? 'instructor@skilltrail.com' : slug(r.instructor).replace(/-/g, '.') + '@skilltrail.com', r.instructor), secs = sections(r.cur, r.title);
     secs[0].quiz = quiz(secs[0]);
     return {
       courseId: i + 1, title: r.title, description: r.description, categoryId: CATS.indexOf(r.category) + 1, level: r.level, price: r.price, imageUrl: 'https://loremflickr.com/1200/700/' + r.kw + '?lock=' + (i + 21),
       status: 'PUBLISHED', rejectReason: null, instructorId: inst.userId, language: r.lang, durationHours: r.hours, details: { tagline: r.tagline, learn: r.learn, requirements: r.req, skills: r.skills, instructorBio: r.bio }, sections: secs
     };
   });
-  const demo = author('instructor@learnpath.com', 'Nguyen Van An');
+  const demo = author('instructor@skilltrail.com', 'Nguyen Van An');
   [['Spring Security in Practice', 'DRAFT', null, 0], ['REST API Design Patterns', 'PENDING', null, 2], ['Intro to Cloud Computing', 'REJECTED', 'Please add more lessons and a clearer course description.', 2]].forEach((x, k) => courses.push({
     courseId: 16 + k, title: x[0], description: 'Work in progress course created by the demo instructor.', categoryId: 1, level: 'Intermediate', price: k ? 0 : 490000, imageUrl: null,
     status: x[1], rejectReason: x[2], instructorId: demo.userId, language: 'English', details: {}, sections: [{ sectionId: ++sid, title: 'Getting started', position: 1, quiz: null, lessons: x[3] ? [lesson('Welcome', 8, 0, x[0]), lesson('Core concepts', 15, 1, x[0])] : [] }]
@@ -466,7 +466,7 @@ function mock(method, path, body) {
   if (!db) { db = seed((JSON.parse(localStorage.getItem('db5') || localStorage.getItem('db4') || 'null') || {}).users); localStorage.setItem('db6', JSON.stringify(db)); }
   const err = (status, message) => { throw { status, message }; };
   const need = (ok, message) => { if (!ok) err(400, message); };
-  { const ds = db.users.find(u => u.email === 'student@learnpath.com'); if (ds) { // the demo student account was removed: drop it and everything it owned
+  { const ds = db.users.find(u => u.email === 'student@skilltrail.com'); if (ds) { // the demo student account was removed: drop it and everything it owned
     const id = ds.userId; db.users = db.users.filter(u => u !== ds); db.enrollments = db.enrollments.filter(e => e.userId !== id); db.progress = db.progress.filter(p => p.userId !== id); db.attempts = db.attempts.filter(a => a.userId !== id);
     db.reviews = db.reviews.filter(r => r.userId !== id); db.notifications = db.notifications.filter(n => n.userId !== id); if (db.cart) db.cart = db.cart.filter(x => x.userId !== id); if (db.tickets) db.tickets = db.tickets.filter(t => t.userId !== id); } }
   db.users.forEach(u => { if (u.role === 'INSTRUCTOR') { u.role = 'STUDENT'; u.author = true; u.locked = true; } }); // data saved before the instructor role was removed
@@ -548,20 +548,6 @@ function mock(method, path, body) {
       if (u.locked) { log('ACCOUNT', 'LOGIN_BLOCKED', { user: u, actor: u.fullName, detail: 'Account is locked' }); save(); err(403, 'This account has been locked. Contact an admin.'); }
       log('ACCOUNT', 'LOGIN', { user: u, actor: u.fullName, detail: 'Email and password' });
       return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
-    }
-    if (R('POST', /^\/auth\/forgot-password$/)) { // real server: email a 6-digit code/link and return only {message}. Mock has no mailbox, so it also returns demoCode
-      const email = (body?.email || '').trim().toLowerCase(); need(/^\S+@\S+\.\S+$/.test(email), 'Enter a valid email');
-      const u = db.users.find(x => x.email.toLowerCase() === email && !x.locked); db.resets = (db.resets || []).filter(r => r.email !== email && r.expires > Date.now());
-      const msg = 'If that email is registered, a reset code has been sent.'; if (!u) return { message: msg };
-      const code = String(Math.floor(100000 + Math.random() * 900000)); db.resets.push({ email, code, expires: Date.now() + 10 * 60000, tries: 0 });
-      log('ACCOUNT', 'RESET_REQUESTED', { user: u, actor: u.fullName, detail: 'Forgot password' }); return { message: msg, demoCode: code };
-    }
-    if (R('POST', /^\/auth\/reset-password$/)) {
-      const { email = '', code = '', newPassword = '' } = body || {}, e = email.trim().toLowerCase(); need(newPassword.length >= 6, 'Password must be at least 6 characters');
-      const r = (db.resets || []).find(x => x.email === e), u = db.users.find(x => x.email.toLowerCase() === e);
-      if (!r || !u || r.expires < Date.now()) err(400, 'Reset code is invalid or expired');
-      if (r.code !== String(code).trim()) { if (++r.tries >= 5) db.resets = db.resets.filter(x => x !== r); localStorage.setItem('db6', JSON.stringify(db)); err(400, 'Reset code is invalid or expired'); }
-      u.password = newPassword; db.resets = db.resets.filter(x => x !== r); log('ACCOUNT', 'PASSWORD_RESET', { user: u, actor: u.fullName, detail: 'Forgot password' }); return null;
     }
     if (R('POST', /^\/auth\/google$/)) {
       let g; try { g = decodeJwt(body.credential); } catch { err(401, 'Invalid Google sign-in token'); }
@@ -826,7 +812,7 @@ function card(c, mine) {
    <button class="btn btn-sm theme-toggle ms-lg-2" id="themeToggle" type="button"></button>
    <button class="btn btn-sm mode-toggle ms-lg-2" id="modeToggle" type="button" title="Switch data source"><i class="bi bi-database"></i> ${modeLabel}</button></div></div></nav>`);
   const themeButton = document.getElementById('themeToggle'); if (themeButton) { themeButton.addEventListener('click', toggleTheme); paintThemeToggle(); }
-  const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const live = localStorage.getItem('learnpath-mode') === 'live'; localStorage.setItem('learnpath-mode', live ? 'mock' : 'live'); toast(live ? 'Mock data mode enabled' : 'Live API mode enabled'); setTimeout(() => location.reload(), 250); });
+  const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const live = localStorage.getItem('skilltrail-mode') === 'live'; localStorage.setItem('skilltrail-mode', live ? 'mock' : 'live'); toast(live ? 'Mock data mode enabled' : 'Live API mode enabled'); setTimeout(() => location.reload(), 250); });
   document.body.insertAdjacentHTML('beforeend', `<footer class="glass text-center py-4 mt-auto">
    <div class="fs-5 fw-bold mb-2"><i class="bi bi-mortarboard-fill"></i> SkillTrail</div>
    <div class="links mb-2"><a href="index.html" class="mx-2">Home</a><a href="index.html#courses" class="mx-2">Courses</a><a href="index.html#help" class="mx-2">Help</a><a href="index.html#support" class="mx-2">Support</a></div>
