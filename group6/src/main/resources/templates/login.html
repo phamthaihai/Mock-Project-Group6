@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Đăng nhập | SkillTrail</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}"/>
+</head>
+<body>
+<main class="auth-layout">
+    <aside class="auth-aside">
+        <div class="brand">SkillTrail</div>
+        <div class="aside-copy">
+            <h1>Tiếp tục hành trình học tập.</h1>
+            <p>Đăng nhập để trở lại không gian học và theo dõi tiến độ của bạn.</p>
+        </div>
+        <div class="aside-note">Learning, one step at a time.</div>
+    </aside>
+    <section class="auth-card">
+        <h2>Chào mừng trở lại</h2>
+        <p class="subtitle">Nhập thông tin tài khoản để tiếp tục.</p>
+        <div th:if="${success != null}" class="alert" th:text="${success}"></div>
+
+        <form th:action="@{/login}" th:object="${loginDTO}" method="post" novalidate>
+            <label for="email">Email</label>
+            <input id="email" type="email" th:field="*{email}" placeholder="you@example.com" autocomplete="email" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+
+            <label for="password">Mật khẩu</label>
+            <input id="password" type="password" th:field="*{password}" placeholder="Nhập mật khẩu" autocomplete="current-password" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+
+            <button type="submit" class="button">Đăng nhập</button>
+        </form>
+        <div th:if="${error != null}" class="alert alert-error" th:text="${error}"></div>
+        <a class="button button-secondary oauth-link" th:href="@{/oauth2/authorization/google}">Tiếp tục với Google</a>
+        <div class="form-links">
+            <a th:href="@{/register}">Tạo tài khoản</a>
+            <a th:href="@{/forgot-password}">Quên mật khẩu?</a>
+        </div>
+    </section>
+</main>
+</body>
+</html>

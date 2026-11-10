@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Tạo tài khoản | SkillTrail</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}"/>
+</head>
+<body>
+<main class="auth-layout">
+    <aside class="auth-aside">
+        <div class="brand">SkillTrail</div>
+        <div class="aside-copy">
+            <h1>Mỗi kỹ năng bắt đầu từ một bước.</h1>
+            <p>Tạo tài khoản để bắt đầu hành trình học tập của bạn.</p>
+        </div>
+        <div class="aside-note">Your next chapter starts here.</div>
+    </aside>
+    <section class="auth-card">
+        <h2>Tạo tài khoản</h2>
+        <p class="subtitle">Điền thông tin bên dưới để đăng ký.</p>
+        <div th:if="${err != null}" class="alert alert-error" th:text="${err}"></div>
+
+        <form th:action="@{/register}" th:object="${registerDTO}" method="post" novalidate>
+            <label for="fullname">Họ tên</label>
+            <input id="fullname" type="text" th:field="*{fullname}" placeholder="Nhập họ tên" autocomplete="name" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('fullname')}" th:errors="*{fullname}"></span>
+
+            <label for="email">Email</label>
+            <input id="email" type="email" th:field="*{email}" placeholder="you@example.com" autocomplete="email" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+
+            <label for="phone">Số điện thoại</label>
+            <input id="phone" type="tel" th:field="*{phone}" placeholder="0912345678" autocomplete="tel" inputmode="numeric" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></span>
+
+            <label for="password">Mật khẩu</label>
+            <input id="password" type="password" th:field="*{password}" placeholder="Ít nhất 7 ký tự" autocomplete="new-password" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
+
+            <label for="confirmPassword">Xác nhận mật khẩu</label>
+            <input id="confirmPassword" type="password" th:field="*{confirmPassword}" placeholder="Nhập lại mật khẩu" autocomplete="new-password" required/>
+            <span class="field-error" th:if="${#fields.hasErrors('confirmPassword')}" th:errors="*{confirmPassword}"></span>
+            <span class="field-error" th:if="${#fields.hasErrors('passwordMatch')}" th:errors="*{passwordMatch}"></span>
+
+            <button type="submit" class="button">Tạo tài khoản</button>
+        </form>
+        <div class="form-links"><span>Đã có tài khoản?</span><a th:href="@{/login}">Đăng nhập</a></div>
+    </section>
+</main>
+</body>
+</html>
