@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>Hồ sơ | SkillTrail</title>
+    <link rel="stylesheet" th:href="@{/css/auth.css}"/>
+</head>
+<body>
+<main class="profile-shell">
+    <div class="profile-top">
+        <div><div class="brand">SkillTrail</div><h1>Hồ sơ của bạn</h1></div>
+        <a th:href="@{/}">Trang chủ</a>
+    </div>
+
+    <nav class="tabs">
+        <a class="tab" th:classappend="${activeTab == 'profile'} ? 'active' : ''" th:href="@{/user-profile(tab='profile')}">Thông tin</a>
+        <a class="tab" th:classappend="${activeTab == 'password'} ? 'active' : ''" th:href="@{/user-profile(tab='password')}">Đổi mật khẩu</a>
+    </nav>
+
+    <div th:if="${success != null}" class="alert" th:text="${success}"></div>
+    <div th:if="${error != null}" class="alert alert-error" th:text="${error}"></div>
+    <div th:if="${passwordError != null}" class="alert alert-error" th:text="${passwordError}"></div>
+
+    <div th:if="${activeTab == 'profile'}">
+        <form th:action="@{/user-profile}" th:object="${profileDTO}" method="post" enctype="multipart/form-data" novalidate>
+            <div class="profile-grid">
+                <div>
+                    <label>Họ tên</label>
+                    <input type="text" th:field="*{fullName}" required />
+                    <span class="field-error" th:if="${#fields.hasErrors('fullName')}" th:errors="*{fullName}"></span>
+
+                    <label>Email</label>
+                    <input type="email" th:field="*{email}" required />
+                    <span class="field-error" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
+                </div>
+                <div>
+                    <label>Số điện thoại</label>
+                    <input type="text" th:field="*{phone}" required />
+                    <span class="field-error" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></span>
+
+                    <label>Avatar</label>
+                    <input type="file" name="avatarFile" />
+                </div>
+            </div>
+            <button type="submit" class="btn">Lưu thay đổi</button>
+        </form>
+    </div>
+
+    <div th:if="${activeTab == 'password'}">
+        <form th:action="@{/change-password}" th:object="${changePasswordDTO}" method="post" novalidate>
+            <label>Mật khẩu hiện tại</label>
+            <input type="password" th:field="*{oldPassword}" required />
+            <span class="field-error" th:if="${#fields.hasErrors('oldPassword')}" th:errors="*{oldPassword}"></span>
+
+            <label>Mật khẩu mới</label>
+            <input type="password" th:field="*{newPassword}" required />
+            <span class="field-error" th:if="${#fields.hasErrors('newPassword')}" th:errors="*{newPassword}"></span>
+
+            <label>Xác nhận mật khẩu mới</label>
+            <input type="password" th:field="*{confirmPassword}" required />
+            <span class="field-error" th:if="${#fields.hasErrors('confirmPassword')}" th:errors="*{confirmPassword}"></span>
+            <span class="field-error" th:if="${#fields.hasErrors('passwordMatch')}" th:errors="*{passwordMatch}"></span>
+
+            <button type="submit" class="btn">Đổi mật khẩu</button>
+        </form>
+    </div>
+</main>
+</body>
+</html>
