@@ -14,16 +14,3 @@
 
 - From 2nd time:
   '.\mvnw.cmd spring-boot:run'
-
-
-## New features
-- **Shopping cart** (`cart.html`): "Add to cart" on paid course pages, cart icon with count in the navbar, one checkout for several courses (card / e-wallet / bank / demo). Not shown for ADMIN accounts, who enroll without payment.
-- **Roles**: STUDENT and ADMIN only. The instructor role and instructor studio were removed; a course's instructor is just the teacher name shown on the course. Admins manage courses, curriculum and quizzes in the admin console.
-- Mock-mode endpoints live in `js/common.js`; the contract for the real backend is at the end of `database/API.md` (plus a `CartItems` table in `database/schema.sql`).
-- Try it: `student@skilltrail.com` / `123456` (cart), `admin@skilltrail.com` / `admin123` (admin console).
-
-
-## For backend development
-- Same layout as `group6` on main: package `com.mockProject.group6` with `controller`, `entity`, `repository`, `service`, `service/impl` (the Auth classes are still empty).
-- Pages are static files in `src/main/resources/static`; put Thymeleaf templates (if any) in `src/main/resources/templates`.
-- API contract: `database/API.md`, tables: `database/schema.sql`. Set `USE_MOCK:false` in `static/js/config.js` once the API is ready.
