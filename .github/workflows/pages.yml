@@ -3,7 +3,7 @@ name: Deploy SkillTrail to Pages
 on:
   push:
     branches: [feature/learnhub-frontend]
-    paths: ['skilltrail-frontend/src/main/resources/static/**']
+    paths: ['skilltrail/src/main/resources/static/**']
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,6 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: skilltrail-frontend/src/main/resources/static
+          path: skilltrail/src/main/resources/static
       - id: deployment
         uses: actions/deploy-pages@v4
