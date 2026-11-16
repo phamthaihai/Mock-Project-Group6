@@ -280,18 +280,23 @@ public class CourseService {
             """, courseId, userId);
     }
 
-    public List<Map<String, Object>> cart(int userId) {
-        return jdbc.queryForList("""
-            SELECT c.CourseId AS courseId,
-                   c.Title AS title,
-                   c.Price AS price,
-                   c.ImageUrl AS imageUrl
-            FROM dbo.CartItems ci
-            JOIN dbo.Courses c ON c.CourseId = ci.CourseId
-            WHERE ci.UserId = ?
-            ORDER BY ci.AddedAt DESC
-            """, userId);
-    }
+
+public List<Map<String, Object>> cart(int userId) {
+    return jdbc.queryForList("""
+        SELECT c.CourseId AS courseId,
+               c.Title AS title,
+               c.Price AS price,
+               c.ImageUrl AS imageUrl,
+               cat.Name AS category
+        FROM dbo.CartItems ci
+        JOIN dbo.Courses c ON c.CourseId = ci.CourseId
+        LEFT JOIN dbo.Categories cat
+            ON cat.CategoryId = c.CategoryId
+        WHERE ci.UserId = ?
+        ORDER BY ci.AddedAt DESC
+        """, userId);
+}
+
 
     public void addToCart(int courseId, int userId) {
         Map<String, Object> c = course(courseId);

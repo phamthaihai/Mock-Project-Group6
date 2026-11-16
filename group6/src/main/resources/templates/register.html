@@ -31,11 +31,11 @@
           <span class="field-error d-block small text-danger mt-1" th:if="${#fields.hasErrors('email')}" th:errors="*{email}"></span>
         </div>
         <div class="mb-2">
-          <input id="phone" type="tel" th:field="*{phone}" class="form-control" placeholder="Phone (10 digits)" inputmode="numeric" maxlength="10" autocomplete="tel" required>
+          <input id="phone" type="tel" th:field="*{phone}" class="form-control" placeholder="Phone" inputmode="numeric" maxlength="10" autocomplete="tel" required>
           <span class="field-error d-block small text-danger mt-1" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></span>
         </div>
         <div class="mb-2">
-          <input id="password" type="password" th:field="*{password}" class="form-control" placeholder="Password (min 7)" autocomplete="new-password" required>
+          <input id="password" type="password" th:field="*{password}" class="form-control" placeholder="Password " autocomplete="new-password" required>
           <span class="field-error d-block small text-danger mt-1" th:if="${#fields.hasErrors('password')}" th:errors="*{password}"></span>
         </div>
         <div class="mb-3">

@@ -134,7 +134,7 @@ public class UserService {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
 
         user.setPasswordResetTokenHash(hashPasswordResetToken(token));
-        user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
+        user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusSeconds(5));
         userRepository.save(user);
         return Optional.of(token);
     }
