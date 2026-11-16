@@ -1,5 +1,6 @@
 /* ===== CONFIG: set USE_MOCK=false when the Spring Boot backend is ready ===== */
 const CONFIG = {
+  // 'mock' (default) = everything runs on mock data in the browser; 'live' = everything goes to the real Spring Boot API. The navbar button switches.
   USE_MOCK: localStorage.getItem('skilltrail-mode') !== 'live', API_BASE: '/api',
   // Google sign-in: paste your OAuth "Web application" Client ID here (Google Cloud Console > APIs & Services > Credentials).
   // Leave empty to use the demo dialog in Mock mode. A Client ID is public, it is safe to commit; never commit the client SECRET.
@@ -99,6 +100,16 @@ async function initGoogleButton(box) {
     google.accounts.id.initialize({ client_id: id, callback: r => googleSignIn(r.credential) });
     draw(); document.addEventListener('themechange', draw);
   } catch (e) { plain(); }
+}
+
+/* ===== Sign-up validation: one rule set used by signup.html (inline messages) AND by the Mock API (and to be mirrored by the Spring Boot DTO) ===== */
+const SIGNUP_RULES = {
+  fullName: v => { v = String(v || '').trim(); return !v ? 'Full name is required' : v.length < 2 ? 'Full name must be at least 2 characters' : v.length > 100 ? 'Full name must be at most 100 characters' : !/^[\p{L}][\p{L} .'\-]*$/u.test(v) ? 'Full name can only contain letters, spaces, . \' and -' : ''; },
+  email: v => { v = String(v || '').trim(); return !v ? 'Email is required' : v.length > 150 ? 'Email must be at most 150 characters' : !/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/.test(v) ? 'Enter a valid email, for example name@gmail.com' : ''; },
+  password: v => { v = String(v || ''); return !v ? 'Password is required' : v.length < 6 ? 'Password must be at least 6 characters' : v.length > 64 ? 'Password must be at most 64 characters' : /\s/.test(v) ? 'Password cannot contain spaces' : !/[A-Za-z]/.test(v) || !/\d/.test(v) ? 'Password needs at least one letter and one number' : ''; }
+};
+function validateSignup(d) { // returns { field: message } for every invalid field; {} = valid
+  const out = {}; Object.keys(SIGNUP_RULES).forEach(k => { const m = SIGNUP_RULES[k](d?.[k]); if (m) out[k] = m; }); return out;
 }
 
 function guard(...roles) {
@@ -457,7 +468,7 @@ function seed(oldUsers) {
   })));
   const at = isoLocal(new Date()), notifications = [
     { notificationId: 2, userId: demo.userId, message: 'Your course "Intro to Cloud Computing" was rejected: Please add more lessons and a clearer course description.', link: 'my-courses.html', read: false, createdAt: at },
-    { notificationId: 3, userId: admin.userId, message: '"REST API Design Patterns" is waiting for approval', link: 'index.html#courses', read: false, createdAt: at }];
+    { notificationId: 3, userId: admin.userId, message: '"REST API Design Patterns" is waiting for approval', link: 'courses.html', read: false, createdAt: at }];
   return { users, categories, courses, enrollments, progress: [], attempts: [], reviews, notifications, eid, aid: 0, rid, nid: 3, sid, lid, qid, oid, zid };
 }
 
@@ -534,19 +545,44 @@ function mock(method, path, body) {
   };
   const reviewOk = b => need(Number.isInteger(+b.rating) && +b.rating >= 1 && +b.rating <= 5, 'Rating must be 1 to 5');
 
+  // Email verification codes (real server: emailed, stored hashed, 6 digits, 10 min, 5 tries, 60 s between sends). Mock has no mailbox, so it returns demoCode.
+  const issueCode = em => {
+    const e = em.trim().toLowerCase(), old = (db.verifs || []).find(v => v.email === e);
+    if (old && Date.now() - old.sentAt < 60000) err(429, 'Please wait ' + Math.ceil((60000 - (Date.now() - old.sentAt)) / 1000) + ' seconds before requesting a new code');
+    const code = String(Math.floor(100000 + Math.random() * 900000)); db.verifs = (db.verifs || []).filter(v => v.email !== e && v.expires > Date.now());
+    db.verifs.push({ email: e, code, expires: Date.now() + 10 * 60000, tries: 0, sentAt: Date.now() }); return code;
+  };
+
   const out = (() => {
     /* ---- public ---- */
     if (R('POST', /^\/auth\/register$/)) {
       const { fullName, email, password } = body || {};
-      need(fullName && fullName.trim(), 'Full name is required'); need(/^\S+@\S+\.\S+$/.test(email || ''), 'Enter a valid email'); need((password || '').length >= 6, 'Password must be at least 6 characters');
-      if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) err(409, 'Email already registered');
-      const nu = { userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false }; db.users.push(nu); log('ACCOUNT', 'REGISTERED', { user: nu, actor: nu.fullName, detail: 'Email sign-up' }); return null;
+      { const bad = validateSignup({ fullName, email, password }), first = Object.keys(bad)[0]; if (first) err(400, bad[first]); }
+      const ex = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (ex && ex.verified !== false) err(409, 'Email already registered');
+      let nu = ex; // an unverified sign-up for this email (typo, lost code) is simply redone
+      if (nu) { nu.fullName = fullName.trim(); nu.password = password; }
+      else { nu = { userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false, verified: false }; db.users.push(nu); log('ACCOUNT', 'REGISTERED', { user: nu, actor: nu.fullName, detail: 'Email sign-up (awaiting email verification)' }); }
+      return { verificationRequired: true, message: 'We sent a 6-digit code to ' + email + '.', demoCode: issueCode(nu.email) };
+    }
+    if (R('POST', /^\/auth\/verify-email$/)) {
+      const { email = '', code = '' } = body || {}, e = email.trim().toLowerCase(), bad = 'Verification code is invalid or expired';
+      const v = (db.verifs || []).find(x => x.email === e), u = db.users.find(x => x.email.toLowerCase() === e && x.verified === false);
+      if (!v || !u || v.expires < Date.now()) err(400, bad);
+      if (v.code !== String(code).trim()) { if (++v.tries >= 5) db.verifs = db.verifs.filter(x => x !== v); localStorage.setItem('db6', JSON.stringify(db)); err(400, bad); }
+      u.verified = true; db.verifs = db.verifs.filter(x => x !== v); return null;
+    }
+    if (R('POST', /^\/auth\/resend-code$/)) {
+      const e = (body?.email || '').trim().toLowerCase(), u = db.users.find(x => x.email.toLowerCase() === e && x.verified === false);
+      const msg = 'If that email is waiting for verification, a new code has been sent.'; if (!u) return { message: msg };
+      return { message: msg, demoCode: issueCode(e) };
     }
     if (R('POST', /^\/auth\/login$/)) {
       const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password && u.password === body.password);
       const save = () => localStorage.setItem('db6', JSON.stringify(db)); // failed attempts are logged too, so save before throwing
       if (!u) { log('ACCOUNT', 'LOGIN_FAILED', { email: body.email || '', actor: '', detail: 'Wrong email or password' }); save(); err(401, 'Invalid email or password'); }
       if (u.locked) { log('ACCOUNT', 'LOGIN_BLOCKED', { user: u, actor: u.fullName, detail: 'Account is locked' }); save(); err(403, 'This account has been locked. Contact an admin.'); }
+      if (u.verified === false) err(403, 'Please verify your email first');
       log('ACCOUNT', 'LOGIN', { user: u, actor: u.fullName, detail: 'Email and password' });
       return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
@@ -573,7 +609,7 @@ function mock(method, path, body) {
       if (u && u.locked) err(403, 'This account has been locked. Contact an admin.');
       if (u && u.googleLinked === false) err(403, 'Google sign-in is unbound from this account. Log in with your email and password.');
       if (!u) { u = { userId: Date.now(), fullName: (g.name || g.email.split('@')[0]).trim(), email: g.email, password: null, role: 'STUDENT', locked: false, provider: 'GOOGLE', avatar: g.picture || '' }; db.users.push(u); created = true; }
-      u.googleLinked = true; if (!u.avatar && g.picture) u.avatar = g.picture; // same email = same account; the picture is saved on the account so every login method shows it
+      u.googleLinked = true; u.verified = true; if (!u.avatar && g.picture) u.avatar = g.picture; // same email = same account; the picture is saved on the account so every login method shows it
       log('ACCOUNT', created ? 'REGISTERED' : 'LOGIN', { user: u, actor: u.fullName, detail: 'Google sign-in' });
       return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
     }
@@ -708,7 +744,7 @@ function mock(method, path, body) {
     if (R('POST', /^\/courses\/(\d+)\/submit$/)) {
       const c = manage(course(m[1])); if (!own(c)) err(403, 'Only the course owner can submit it'); need(['DRAFT', 'REJECTED'].includes(c.status), 'Only draft or rejected courses can be submitted');
       need(c.sections.some(s => s.lessons.length > 0), 'Add at least one section and one lesson before submitting'); c.status = 'PENDING'; c.rejectReason = null;
-      db.users.filter(u => u.role === 'ADMIN').forEach(u => notify(u.userId, '"' + c.title + '" is waiting for approval', 'index.html#courses')); return view(c);
+      db.users.filter(u => u.role === 'ADMIN').forEach(u => notify(u.userId, '"' + c.title + '" is waiting for approval', 'courses.html')); return view(c);
     }
     if (R('GET', /^\/courses\/(\d+)\/students$/)) {
       const c = manage(course(m[1])), total = lessonsOf(c).length;
@@ -756,7 +792,7 @@ function mock(method, path, body) {
     if (R('PUT', /^\/admin\/tickets\/(\d+)$/)) {
       const t = db.tickets.find(x => x.ticketId === +m[1]) || err(404, 'Ticket not found'), status = body.status || t.status, reply = (body.reply || '').trim();
       need(['OPEN', 'RESOLVED'].includes(status), 'Invalid status');
-      if (reply) { t.reply = reply.slice(0, 1000); t.repliedAt = now(); if (t.userId) notify(t.userId, 'Support replied to "' + t.subject + '"', 'index.html#support'); }
+      if (reply) { t.reply = reply.slice(0, 1000); t.repliedAt = now(); if (t.userId) notify(t.userId, 'Support replied to "' + t.subject + '"', 'support.html#support'); }
       t.status = status; return t;
     }
     if (R('GET', /^\/admin\/logs\/(account|payment|enrollment|completion)$/)) return db.logs.filter(l => l.type === m[1].toUpperCase()).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.logId - a.logId).slice(0, 500);
@@ -803,19 +839,20 @@ function card(c, mine) {
 (function layout() {
   const p = location.pathname.split('/').pop() || 'index.html', on = h => p === h ? ' active' : '', u = state.user, role = u?.role;
   document.body.classList.add('d-flex', 'flex-column', 'min-vh-100');
-  document.head.insertAdjacentHTML('beforeend', '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>' + UI_CSS + CERT_CSS + '</style>');
+  document.head.insertAdjacentHTML('beforeend', '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>' + UI_CSS + CERT_CSS + '</style><link href="css/fx.css" rel="stylesheet">');
   const pill = '';
   const avatar = u?.avatar || '';
   const modeLabel = CONFIG.USE_MOCK ? 'Mock data' : 'Live API';
   document.body.insertAdjacentHTML('afterbegin', `<div class="bg"><i></i><i></i><i></i><i></i></div>
   <nav class="navbar navbar-expand-lg sticky-top glass ${role === 'ADMIN' ? 'admin-nav' : ''}"><div class="container">
-   <a class="navbar-brand fw-bold" href="index.html"><i class="bi bi-mortarboard-fill"></i> Skill<span>Trail</span></a>
+   <a class="navbar-brand fw-bold" href="index.html"><b class="brand-mark"><i class="bi bi-mortarboard-fill"></i></b><span class="brand-word">Skill<span>Trail</span></span></a>
    <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
    <div class="collapse navbar-collapse" id="nav"><ul class="navbar-nav me-auto">
     <li class="nav-item"><a class="nav-link${on('index.html')}" href="index.html">Home</a></li>
-    <li class="nav-item"><a class="nav-link" href="index.html#courses">Courses</a></li>
-    <li class="nav-item"><a class="nav-link" href="index.html#help">Help</a></li>
-    <li class="nav-item"><a class="nav-link" href="index.html#support">Support</a></li>
+    <li class="nav-item"><a class="nav-link${on('courses.html')}" href="courses.html">Courses</a></li>
+    <li class="nav-item"><a class="nav-link${on('support.html')}" href="support.html">Support</a></li>
+    <li class="nav-item"><a class="nav-link${on('about.html')}" href="about.html">About</a></li>
+    <li class="nav-item"><a class="nav-link${on('contact.html')}" href="contact.html">Contact</a></li>
     ${u ? `<li class="nav-item"><a class="nav-link${on('my-courses.html')}" href="my-courses.html">My Courses</a></li>` : ''}
     ${role === 'ADMIN' ? `<li class="nav-item"><a class="nav-link${on('admin.html')}" href="admin.html"><i class="bi bi-shield-lock"></i> Admin</a></li>` : ''}
 
@@ -827,22 +864,26 @@ function card(c, mine) {
    <button class="btn btn-sm theme-toggle ms-lg-2" id="themeToggle" type="button"></button>
    <button class="btn btn-sm mode-toggle ms-lg-2" id="modeToggle" type="button" title="Switch data source"><i class="bi bi-database"></i> ${modeLabel}</button></div></div></nav>`);
   const themeButton = document.getElementById('themeToggle'); if (themeButton) { themeButton.addEventListener('click', toggleTheme); paintThemeToggle(); }
-  const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const live = localStorage.getItem('skilltrail-mode') === 'live'; localStorage.setItem('skilltrail-mode', live ? 'mock' : 'live'); toast(live ? 'Mock data mode enabled' : 'Live API mode enabled'); setTimeout(() => location.reload(), 250); });
-  document.body.insertAdjacentHTML('beforeend', `<footer class="glass text-center py-4 mt-auto">
-   <div class="fs-5 fw-bold mb-2"><i class="bi bi-mortarboard-fill"></i> SkillTrail</div>
-   <div class="links mb-2"><a href="index.html" class="mx-2">Home</a><a href="index.html#courses" class="mx-2">Courses</a><a href="index.html#help" class="mx-2">Help</a><a href="index.html#support" class="mx-2">Support</a></div>
-   <div class="mb-2"><a href="#" class="mx-2"><i class="bi bi-facebook"></i></a><a href="#" class="mx-2"><i class="bi bi-instagram"></i></a>
-   <a href="#" class="mx-2"><i class="bi bi-twitter-x"></i></a><a href="#" class="mx-2"><i class="bi bi-github"></i></a></div>
-   <small class="text-secondary">&copy; 2026 SkillTrail. All rights reserved.</small></footer>
+  const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const next = CONFIG.USE_MOCK ? 'live' : 'mock'; localStorage.setItem('skilltrail-mode', next); toast(next === 'live' ? 'Live API mode enabled' : 'Mock data mode enabled'); setTimeout(() => location.reload(), 250); });
+  document.body.insertAdjacentHTML('beforeend', `<footer class="footer2 glass mt-auto"><div class="container"><div class="row g-4">
+    <div class="col-lg-4"><a class="navbar-brand fw-bold mb-3" href="index.html"><b class="brand-mark"><i class="bi bi-mortarboard-fill"></i></b><span class="brand-word">Skill<span>Trail</span></span></a>
+     <p class="text-secondary mb-3" style="max-width:330px">Expert-led online courses you can take anytime, on any device. Track your progress, pass quizzes and earn certificates.</p>
+     <div class="soc"><a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a><a href="#" aria-label="Instagram"><i class="bi bi-instagram"></i></a><a href="#" aria-label="X"><i class="bi bi-twitter-x"></i></a><a href="#" aria-label="GitHub"><i class="bi bi-github"></i></a></div></div>
+    <div class="col-6 col-lg-2"><h6>Explore</h6><div class="fl"><a href="index.html">Home</a><a href="courses.html">Courses</a><a href="my-courses.html">My courses</a><a href="about.html">About us</a></div></div>
+    <div class="col-6 col-lg-3"><h6>Support</h6><div class="fl"><a href="support.html#help">Help &amp; FAQ</a><a href="support.html#support">Send a request</a><a href="contact.html">Contact</a><a href="login.html">Login</a></div></div>
+    <div class="col-lg-3"><h6>Get in touch</h6><div class="fl"><a href="contact.html"><i class="bi bi-geo-alt me-2"></i>FPT University, Hoa Lac, Hanoi</a><a href="mailto:support@skilltrail.com"><i class="bi bi-envelope me-2"></i>support@skilltrail.com</a><a href="contact.html"><i class="bi bi-clock me-2"></i>Mon - Fri, 8:00 - 17:00</a></div></div>
+   </div><div class="bottom d-flex justify-content-between flex-wrap gap-2"><small class="text-secondary">&copy; 2026 SkillTrail. All rights reserved.</small><small class="text-secondary">Made with <i class="bi bi-heart-fill" style="color:#ff5fa2"></i> in Hanoi</small></div></div></footer>
    <button id="toTop" class="btn btn-primary rounded-circle" aria-label="Scroll to top"><i class="bi bi-arrow-up"></i></button>
    <div id="toasts" class="toast-container position-fixed top-0 end-0 p-3"></div>
    <div class="modal fade" id="confirmModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content text-center p-3">
     <div class="modal-body"><div id="cfIcon" class="cf-icon danger"><i class="bi bi-exclamation-triangle-fill"></i></div><h5 id="cfTitle" class="mb-2"></h5><p id="cfMsg" class="text-secondary mb-4"></p>
     <div class="d-flex gap-2"><button class="btn btn-outline-light flex-fill" data-bs-dismiss="modal">Cancel</button><button id="cfOk" class="btn btn-danger flex-fill"></button></div></div></div></div></div>`);
   
-  /* ---- Smooth navigation to #courses / #help / #support ---------------------------------
-     Arriving from another page (My Courses, Profile, ...): the home page opens at the top, waits until
-     its layout has finished loading (the course grid is fetched and rendered after load), then glides
+  const fxScript = document.createElement('script'); fxScript.src = 'js/fx.js'; document.body.appendChild(fxScript);
+
+  /* ---- Smooth navigation to a section (support.html#help / #support / #about / #contact) ------------
+     Arriving from another page (footer, notification, ...): the page opens at the top, waits until
+     its layout has finished loading (content is fetched and rendered after load), then glides
      down to the section. Waiting matters: scrolling while content is still being inserted would stop
      short. Any wheel / touch / key press by the visitor cancels it. */
   const NAV_OFFSET = 70; // sticky navbar height; must match scroll-padding-top in style.css
@@ -870,32 +911,17 @@ function card(c, mine) {
     tick();
     arrival = { cancel };
   };
-  // Home page: highlight Home / Courses / About / Contact according to the section currently on screen
-  if (/\/(index\.html)?$/.test(location.pathname)) {
-    const links = [...document.querySelectorAll('.navbar-nav .nav-link')], by = h => links.find(a => a.getAttribute('href') === h);
-    const spy = () => {
-      const y = NAV_OFFSET + 80, top = id => { const s = document.getElementById(id); return s ? s.getBoundingClientRect().top : Infinity; };
-      let act = by('index.html');
-      if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) act = by('index.html#support');
-      else for (const id of ['support', 'help', 'courses']) if (top(id) <= y) { act = by('index.html#' + id); break; }
-      links.forEach(a => a.classList.toggle('active', a === act));
-    };
-    addEventListener('scroll', spy, { passive: true }); addEventListener('resize', spy); addEventListener('load', spy);
-    if (window.ResizeObserver) new ResizeObserver(spy).observe(document.body);
-    spy();
-  }
   glideOnArrival();
   addEventListener('pageshow', e => { if (e.persisted) glideOnArrival(); });
 
-  // Already on the home page: Home / Courses / About / Contact glide instead of jumping or reloading.
+  // Anchors to a section of the page you are already on (support.html#about ...) glide instead of jumping or reloading.
   document.addEventListener('click', e => {
     const a = e.target.closest && e.target.closest('a[href]');
     if (!a || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0 || a.target === '_blank') return;
     let u; try { u = new URL(a.getAttribute('href'), location.href); } catch { return; }
     const here = location.pathname.replace(/\/+$/, '') || '/';
     const there = u.pathname.replace(/\/+$/, '') || '/';
-    const onHome = /\/(index\.html)?$/.test(location.pathname);
-    if (u.origin !== location.origin || !onHome || there !== here) return;
+    if (u.origin !== location.origin || there !== here || u.search !== location.search || u.hash.length < 2) return; // only #section links on this same page
     e.preventDefault();
     if (arrival) arrival.cancel();
     const id = u.hash.length > 1 ? decodeURIComponent(u.hash.slice(1)) : '';

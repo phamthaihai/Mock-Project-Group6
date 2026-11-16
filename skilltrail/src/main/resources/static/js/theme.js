@@ -22,3 +22,12 @@
   apply(saved() || 'dark');
   window.addEventListener('storage', function (e) { if (e.key === KEY && (e.newValue === 'light' || e.newValue === 'dark')) apply(e.newValue); });
 })();
+
+/* Scroll / entrance animations (css/fx.css + js/fx.js). The class is set here, before the first paint, so animated elements never flash.
+   If fx.js fails to load, the class is removed again after a moment so nothing stays hidden. */
+(function () {
+  var r = document.documentElement;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  r.classList.add('fx-on');
+  setTimeout(function () { if (!window.__fx) r.classList.remove('fx-on'); }, 4000);
+})();

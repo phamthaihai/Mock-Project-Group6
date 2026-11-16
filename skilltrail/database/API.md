@@ -76,7 +76,7 @@ Sections and lessons inside a course reuse the existing `/courses/{id}/sections`
 The server writes one `ActivityLogs` row (see schema.sql) at register, login (also failed or blocked), password change, role/lock change, enroll, unenroll, payment and course completion.
 Admin account: `admin@gmail.com` / `123456` (inserted by schema.sql). The mock also has `admin@skilltrail.com` / `admin123`.
 
-## Help & Support (index.html #support)
+## Help & Support (support.html #support)
 | Method | URL | Who | Notes |
 |---|---|---|---|
 | POST | /support | public (guests too) | `{name,email,category,courseId?,subject,message}` -> `{ticketId}`. `category` PAYMENT/COURSE/ACCOUNT/OTHER. When logged in, name and email come from the account. 400 invalid (subject 3+ chars, message 10+ chars) |
@@ -99,3 +99,21 @@ Admin approves/rejects a course -> the course's instructor profile. A student en
 | POST | /cart/checkout | `{paymentMethod}` (CARD/EWALLET/BANK/DEMO, required when the cart has a paid course) -> `{orderNumber,paymentMethod,items:[{enrollmentId,courseId,title,price}],skipped:[{courseId,title}],total}`. Enrolls in every course, writes the same ENROLLED / PAID logs and instructor notifications as `POST /courses/{id}/enroll`, then empties the cart. Courses that became unavailable (unpublished, now owned, already enrolled) are returned in `skipped`. 400 empty cart or missing method |
 
 The navbar cart badge calls `GET /cart`; if the endpoint is missing the icon hides itself.
+
+## Account extras (implemented by the Spring Boot API)
+| Method | URL | Who | Notes |
+|---|---|---|---|
+| POST | /auth/register | public | `{fullName,email,password}` -> 201 `{userId,fullName,email,role,verificationRequired:true,emailSent}`. The account is saved with `Verified = 0` and a 6-digit code is emailed (BCrypt hash in `EmailVerifications`, 10 minutes, 5 tries, 60 s between sends). 400 invalid (same rules as `validateSignup` in common.js), 409 email already registered and verified |
+| POST | /auth/verify-email | public | `{email,code}` -> 204. 400 "Verification code is invalid or expired" |
+| POST | /auth/resend-code | public | `{email}` -> `{message}` (same answer whether or not the email exists). 429 when asked again within 60 s |
+| POST | /auth/login | public | `{email,password}` -> `{token,user}`. 401 wrong email or password, 403 locked, 403 "Please verify your email first" |
+| POST | /auth/google | public | `{credential}` (Google ID token) -> `{token,created,user}`. The token is checked with Google (tokeninfo) and its audience must equal `skilltrail.google.client-id`. A new account is created when the email is unknown; an existing account is linked and marked verified. 403 locked or unbound |
+| POST | /auth/forgot-password | public | `{email}` -> `{message}` (never says whether the email exists). A 6-digit code is emailed (10 minutes, 5 tries, one per 60 s) |
+| POST | /auth/reset-password | public | `{email,code,newPassword}` -> 204. 400 invalid or expired code, 400 password shorter than 6 |
+| PUT | /users/me/password | any | `{currentPassword,newPassword}` -> 204. A Google-only account (no password) may set one without `currentPassword` |
+| POST | /users/me/google/unbind | any | `{newPassword?,force?}` -> 204. A Google-only account must send `newPassword` (6+ chars) or `force:true` |
+| GET/PUT | /users/me | any | `{userId,fullName,email,role,locked,author,avatar,hasPassword,googleLinked}`; PUT takes `{fullName,avatar?}` |
+
+Tokens are HS256 JWTs (`skilltrail.jwt.secret`, 7 days). The user is reloaded from the database on every request, so a lock or role change applies immediately.
+Run order for the database: `schema.sql`, `seed-courses.sql`, `email-verification.sql`, `backend-api.sql` (adds `Users.Avatar`, `Users.GoogleLinked` and `PasswordResets`).
+
