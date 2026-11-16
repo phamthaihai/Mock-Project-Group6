@@ -1,0 +1,146 @@
+
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <script th:src="@{/js/theme.js}"></script>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    <link th:href="@{/css/style.css}" rel="stylesheet">
+    <link th:href="@{/css/theme.css}" rel="stylesheet">
+    <link th:href="@{/css/courses.css}" rel="stylesheet">
+
+    <title>Lesson · SkillTrail</title>
+</head>
+
+<body class="d-flex flex-column min-vh-100">
+
+<div class="bg"><i></i><i></i><i></i><i></i></div>
+
+<div th:replace="~{course/fragments :: nav}"></div>
+
+<main class="container py-5 flex-grow-1">
+
+    <div th:replace="~{course/fragments :: alerts}"></div>
+
+    <a class="back-link"
+       th:href="@{/courses/{id}/learn(id=${course.courseId})}">
+        ← Course outline
+    </a>
+
+    <div class="course-heading mt-3 mb-4">
+        <small th:text="${lesson.sectionTitle}">Module</small>
+
+        <h1 th:text="${lesson.title}">Lesson</h1>
+
+        <p class="text-secondary"
+           th:text="|${lesson.type} · ${lesson.minutes} minutes|">
+            Lesson
+        </p>
+    </div>
+
+    <div class="row g-4">
+
+        <div class="col-lg-8">
+            <article class="glass p-4 p-md-5 lesson-reader">
+
+                <h4>Lesson material</h4>
+
+                <div th:if="${lesson.text != null and !#strings.isEmpty(lesson.text)}"
+                     class="lesson-content mt-4"
+                     th:text="${lesson.text}">
+                    Content
+                </div>
+
+                <p th:if="${lesson.text == null or #strings.isEmpty(lesson.text)}"
+                   class="text-secondary mt-4">
+                    No written material has been added yet.
+                </p>
+
+                <div th:if="${lesson.contentUrl != null and !#strings.isEmpty(lesson.contentUrl)}"
+                     class="mt-4">
+
+                    <a class="btn btn-outline-info"
+                       th:href="${lesson.contentUrl}"
+                       target="_blank"
+                       rel="noopener noreferrer">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                        Open video or learning resource
+                    </a>
+
+                    <p class="small text-secondary mt-2">
+                        External resources open in a new tab.
+                    </p>
+                </div>
+
+                <hr>
+
+                <form method="post"
+                      th:action="@{/courses/{c}/lessons/{l}/progress(c=${course.courseId},l=${lesson.lessonId})}">
+
+                    <input type="hidden"
+                           name="done"
+                           th:value="${!done}">
+
+                    <input type="hidden"
+                           name="returnToLesson"
+                           value="true">
+
+                    <button class="btn"
+                            th:classappend="${done} ? ' btn-outline-success' : ' btn-primary'"
+                            th:text="${done} ? '✓ Completed — mark incomplete' : 'Mark lesson complete'">
+                        Mark lesson complete
+                    </button>
+                </form>
+
+                <div class="d-flex justify-content-between mt-4 gap-2">
+
+                    <a th:if="${previous != null}"
+                       class="btn btn-outline-light"
+                       th:href="@{/courses/{c}/lessons/{l}(c=${course.courseId},l=${previous.lessonId})}">
+                        ← Previous lesson
+                    </a>
+
+                    <span th:if="${previous == null}"></span>
+
+                    <a th:if="${next != null}"
+                       class="btn btn-primary"
+                       th:href="@{/courses/{c}/lessons/{l}(c=${course.courseId},l=${next.lessonId})}">
+                        Next lesson →
+                    </a>
+
+                </div>
+
+            </article>
+        </div>
+
+        <div class="col-lg-4">
+            <aside class="glass p-4">
+
+                <h5 th:text="${course.title}">Course</h5>
+
+                <p class="text-secondary">
+                    Your progress is saved when you mark lessons complete.
+                </p>
+
+                <a class="btn btn-outline-light w-100"
+                   th:href="@{/courses/{id}/learn(id=${course.courseId})}">
+                    View full outline
+                </a>
+
+            </aside>
+        </div>
+
+    </div>
+</main>
+
+<div th:replace="~{course/fragments :: footer}"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

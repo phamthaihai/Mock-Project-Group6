@@ -42,6 +42,13 @@ public class SecurityConfig {
                         ).permitAll()
                         
                         // 2. Các API công khai theo định nghĩa cũ của bạn
+                        .requestMatchers(HttpMethod.GET, "/courses", "/courses/*").permitAll()
+                        // Course pages use the project's existing HttpSession "user" login.
+                        // Controllers verify that session before every student/private action.
+                        .requestMatchers(
+                                "/my-learning", "/my-courses/**", "/cart", "/cart/**", "/checkout",
+                                "/courses/*/enroll", "/courses/*/learn", "/courses/*/lessons/*/progress"
+                        ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/categories",
