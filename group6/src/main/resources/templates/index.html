@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="js/theme.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+  <link href="css/theme.css" rel="stylesheet">
+    <title>SkillTrail - Learn Online</title>
+</head>
+
+<body>
+    <main class="flex-grow-1">
+        <!-- ============ HERO ============ -->
+        <section class="hero2">
+            <div class="container">
+                <div class="row align-items-center g-5">
+                    <div class="col-lg-6">
+                        <span class="hero-chip" data-reveal><span class="dot"></span> <span><b id="heroCount">15</b> expert-led courses are live</span></span>
+                        <h1 class="mt-3 mb-3" data-reveal style="--delay:80ms">Master <span class="grad-text typed" data-typewriter='["Programming","Data Science","Design","Business","Languages"]'>Programming</span><br>at your own pace</h1>
+                        <p class="lead mb-4" data-reveal style="--delay:160ms">Hundreds of hours of video lessons in programming, data, design and business, available anytime on any device.</p>
+                        <div class="d-flex flex-wrap gap-3 mb-4" data-reveal style="--delay:240ms">
+                            <a href="signup.html" data-cta="learn" class="btn btn-primary btn-lg-x">Start learning <i class="bi bi-arrow-right ms-1"></i></a>
+                            <a href="courses.html" class="btn btn-ghost btn-lg-x"><i class="bi bi-grid me-1"></i> Browse courses</a>
+                        </div>
+                        <div class="trust" data-reveal style="--delay:320ms">
+                            <div class="avatars"><img src="https://i.pravatar.cc/80?img=47" alt=""><img src="https://i.pravatar.cc/80?img=12" alt=""><img src="https://i.pravatar.cc/80?img=32" alt=""><img src="https://i.pravatar.cc/80?img=68" alt=""></div>
+                            <div><div class="stars">★★★★★</div><small class="text-secondary" id="heroLearners">Join our community of learners</small></div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="hero-art" data-parallax="-0.05">
+                            <i class="hero-shape dots"></i><i class="hero-shape ring"></i><i class="hero-shape tri"></i><i class="hero-shape sq"></i><i class="hero-shape star"></i>
+                            <div class="ph ph-1" style="background-image:url('https://picsum.photos/seed/learnhub-study/700/860')"></div>
+                            <div class="ph ph-2" style="background-image:url('https://picsum.photos/seed/learnhub-code/400/400')"></div>
+                            <div class="ph ph-3" style="background-image:url('https://picsum.photos/seed/learnhub-team/460/520')"></div>
+                            <div class="ph ph-4" style="background-image:url('https://picsum.photos/seed/skilltrail-design/360/360')"></div>
+                            <div class="float-card fc-1"><span class="ic"><i class="bi bi-play-circle-fill"></i></span><div><b>Video lessons</b><small>learn anytime, anywhere</small></div></div>
+                            <div class="float-card fc-2"><span class="ic" style="background:linear-gradient(135deg,#22d3ee,#6d5dfc)"><i class="bi bi-patch-check-fill"></i></span><div><b>Certificates</b><small>when you finish a course</small></div></div>
+                            <div class="float-card fc-3"><span class="ic" style="background:linear-gradient(135deg,#f59e0b,#ff5fa2)"><i class="bi bi-graph-up-arrow"></i></span><div><b>Track progress</b><small>lessons and quizzes</small></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="marquee" aria-hidden="true"><div class="marquee-track">
+            <span><i class="bi bi-diamond-fill"></i>Java Full-Stack</span><span><i class="bi bi-diamond-fill"></i>Web Development</span><span><i class="bi bi-diamond-fill"></i>Docker &amp; DevOps</span><span><i class="bi bi-diamond-fill"></i>Machine Learning</span><span><i class="bi bi-diamond-fill"></i>SQL &amp; Data</span><span><i class="bi bi-diamond-fill"></i>UI/UX Design</span><span><i class="bi bi-diamond-fill"></i>Digital Marketing</span><span><i class="bi bi-diamond-fill"></i>Business English</span><span><i class="bi bi-diamond-fill"></i>React</span><span><i class="bi bi-diamond-fill"></i>Power BI</span><span><i class="bi bi-diamond-fill"></i>Project Management</span><span><i class="bi bi-diamond-fill"></i>IELTS</span>
+            <span><i class="bi bi-diamond-fill"></i>Java Full-Stack</span><span><i class="bi bi-diamond-fill"></i>Web Development</span><span><i class="bi bi-diamond-fill"></i>Docker &amp; DevOps</span><span><i class="bi bi-diamond-fill"></i>Machine Learning</span><span><i class="bi bi-diamond-fill"></i>SQL &amp; Data</span><span><i class="bi bi-diamond-fill"></i>UI/UX Design</span><span><i class="bi bi-diamond-fill"></i>Digital Marketing</span><span><i class="bi bi-diamond-fill"></i>Business English</span><span><i class="bi bi-diamond-fill"></i>React</span><span><i class="bi bi-diamond-fill"></i>Power BI</span><span><i class="bi bi-diamond-fill"></i>Project Management</span><span><i class="bi bi-diamond-fill"></i>IELTS</span>
+        </div></div>
+
+        <!-- ============ STATS ============ -->
+        <section class="container py-5">
+            <div class="row g-4">
+                <div class="col-md-4" data-reveal><div class="stat-card glass spot"><span class="ico"><i class="bi bi-collection-play-fill"></i></span><div><div class="num" id="s1">0</div><div class="lab">Courses</div></div></div></div>
+                <div class="col-md-4" data-reveal style="--delay:100ms"><div class="stat-card glass spot"><span class="ico"><i class="bi bi-people-fill"></i></span><div><div class="num" id="s2">0</div><div class="lab">Students enrolled</div></div></div></div>
+                <div class="col-md-4" data-reveal style="--delay:200ms"><div class="stat-card glass spot"><span class="ico"><i class="bi bi-person-video3"></i></span><div><div class="num" id="s3">0</div><div class="lab">Expert instructors</div></div></div></div>
+            </div>
+        </section>
+
+        <!-- ============ CATEGORIES ============ -->
+        <section class="container py-5">
+            <div class="section-title" data-reveal><small>Explore</small><h2>Learn what you love</h2></div>
+            <div class="row g-4" id="catGrid"></div>
+        </section>
+
+        <!-- ============ HOW IT WORKS ============ -->
+        <section id="how" class="container py-5">
+            <div class="section-title" data-reveal><small>Simple steps</small><h2>How it works</h2></div>
+            <div class="row g-4 steps">
+                <div class="col-md-4" data-reveal><div class="step-card"><div class="badge-n"><i class="bi bi-search"></i></div><h5>Find a course</h5><p class="text-secondary mb-0">Search or filter by category, level, price and rating to find the right course.</p></div></div>
+                <div class="col-md-4" data-reveal style="--delay:120ms"><div class="step-card"><div class="badge-n"><i class="bi bi-play-circle"></i></div><h5>Learn at your pace</h5><p class="text-secondary mb-0">Watch lessons, read notes, take quizzes. Your progress is saved automatically.</p></div></div>
+                <div class="col-md-4" data-reveal style="--delay:240ms"><div class="step-card"><div class="badge-n"><i class="bi bi-patch-check"></i></div><h5>Get your certificate</h5><p class="text-secondary mb-0">Finish all lessons and pass the quizzes to earn a certificate you can download.</p></div></div>
+            </div>
+        </section>
+
+        <!-- ============ TOP RATED ============ -->
+        <section id="toprated" class="container py-5">
+            <div class="section-title" data-reveal><small>Learners' favourites</small><h2>Top rated courses</h2></div>
+            <div class="row g-4" id="topGrid"></div>
+            <div class="text-center mt-5" data-reveal><a href="courses.html" class="btn btn-primary btn-lg-x">View all courses <i class="bi bi-arrow-right ms-1"></i></a></div>
+        </section>
+
+        <!-- ============ WHY ============ -->
+        <section class="container py-5">
+            <div class="section-title" data-reveal><small>Why SkillTrail</small><h2>Everything you need to learn</h2></div>
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-3" data-reveal><div class="feature glass spot"><div class="fi"><i class="bi bi-person-video3"></i></div><h5>Expert instructors</h5><p class="text-secondary mb-0">Courses are made by people who do the work every day, with real projects.</p></div></div>
+                <div class="col-md-6 col-lg-3" data-reveal style="--delay:100ms"><div class="feature glass spot"><div class="fi" style="background:linear-gradient(135deg,#22d3ee,#6d5dfc)"><i class="bi bi-phone"></i></div><h5>Learn anywhere</h5><p class="text-secondary mb-0">Phone, tablet or laptop. Start on one device and continue on another.</p></div></div>
+                <div class="col-md-6 col-lg-3" data-reveal style="--delay:200ms"><div class="feature glass spot"><div class="fi" style="background:linear-gradient(135deg,#f59e0b,#ff5fa2)"><i class="bi bi-patch-question"></i></div><h5>Quizzes that count</h5><p class="text-secondary mb-0">Check what you learned after each section and see your best score.</p></div></div>
+                <div class="col-md-6 col-lg-3" data-reveal style="--delay:300ms"><div class="feature glass spot"><div class="fi" style="background:linear-gradient(135deg,#22c55e,#22d3ee)"><i class="bi bi-award"></i></div><h5>Certificates</h5><p class="text-secondary mb-0">Complete a course and download a certificate with your name on it.</p></div></div>
+            </div>
+        </section>
+
+        <!-- ============ TESTIMONIALS ============ -->
+        <section class="container py-5">
+            <div class="section-title" data-reveal><small>Community</small><h2>What learners say</h2></div>
+            <div class="row g-4">
+                <div class="col-lg-4" data-reveal><div class="quote glass"><div class="stars mb-2">★★★★★</div><p>"The lessons are short and clear, and the quizzes made me actually remember things. I finished my first course in two weeks."</p><div class="who"><img src="https://i.pravatar.cc/96?img=5" alt=""><div><b>Linh Tran</b><br><small class="text-secondary">Web Development student</small></div></div></div></div>
+                <div class="col-lg-4" data-reveal style="--delay:120ms"><div class="quote glass"><div class="stars mb-2">★★★★★</div><p>"I like that I can pick up exactly where I stopped. The progress bar keeps me motivated to finish every section."</p><div class="who"><img src="https://i.pravatar.cc/96?img=15" alt=""><div><b>Minh Nguyen</b><br><small class="text-secondary">Data Analysis student</small></div></div></div></div>
+                <div class="col-lg-4" data-reveal style="--delay:240ms"><div class="quote glass"><div class="stars mb-2">★★★★★</div><p>"Great value. The instructors answer questions fast and the certificate helped me in my internship application."</p><div class="who"><img src="https://i.pravatar.cc/96?img=44" alt=""><div><b>Hana Le</b><br><small class="text-secondary">UI/UX Design student</small></div></div></div></div>
+            </div>
+        </section>
+
+        <!-- ============ CALL TO ACTION ============ -->
+        <section class="container py-5">
+            <div class="cta2" data-reveal="zoom"><i class="s s1"></i><i class="s s2"></i><i class="s s3"></i><i class="s s4"></i>
+                <h2 class="display-6 fw-bold mb-2">Ready to start learning?</h2>
+                <p class="mb-4 fs-5">Create a free account and enroll in your first course today.</p>
+                <a href="signup.html" data-cta="signup" class="btn btn-light btn-lg-x">Create your account <i class="bi bi-arrow-right ms-1"></i></a>
+            </div>
+        </section>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+        let courses = [], mine = new Set();
+        /* Logged in: "Start learning" opens the course list; "Create your account" asks before switching accounts.
+           Logged out: the links behave as normal (go to signup.html). */
+        if (state.user) $$('a[data-cta="learn"]').forEach(a => a.setAttribute('href', 'courses.html'));
+        document.addEventListener('click', async e => {
+            const a = e.target.closest('a[data-cta="signup"]'); if (!a || !state.user) return;
+            e.preventDefault();
+            if (!await confirmBox('You are signed in as ' + (state.user.fullName || state.user.email) + '. Log out and create a new account?', { title: 'Create a new account?', confirmText: 'Log out & sign up', danger: false })) return;
+            clearSession(); location.href = 'signup.html';
+        });
+        function countUp(el, to) {
+            let n = 0; const step = Math.max(1, Math.ceil(to / 45));
+            const t = setInterval(() => { n = Math.min(to, n + step); el.textContent = n.toLocaleString('en-US'); if (n >= to) clearInterval(t); }, 28);
+        }
+        const CAT_KW = { Programming: 'coding,computer', Data: 'analytics,charts', Design: 'design,creative', Business: 'business,office', Languages: 'books,language', Marketing: 'marketing,social' };
+        (async () => {
+            let cats = [];
+            try {
+                [cats, courses] = await Promise.all([api('/categories'), api('/courses')]);
+                if (state.user) mine = new Set((await api('/enrollments/me')).map(x => x.courseId));
+            } catch (x) { toast(x.message || 'Could not load courses', 'danger'); }
+            const students = courses.reduce((t, c) => t + c.enrolledCount, 0), ins = new Set(courses.map(c => c.instructor.userId)).size;
+            countUp($('#s1'), courses.length); countUp($('#s2'), students); countUp($('#s3'), ins);
+            $('#heroCount').textContent = courses.length;
+            if (students) $('#heroLearners').textContent = students.toLocaleString('en-US') + ' learners enrolled';
+            $('#catGrid').innerHTML = cats.map((k, i) => {
+                const n = courses.filter(c => c.categoryId === k.categoryId).length;
+                return `<div class="col-sm-6 col-lg-4"><a class="cat-tile c-${esc(k.name)}" href="courses.html?cat=${k.categoryId}" data-reveal style="--delay:${(i % 3) * 90}ms">
+                  <span class="bgimg" style="background-image:url('https://loremflickr.com/700/420/${CAT_KW[k.name] || 'learning'}?lock=${k.categoryId + 40}')"></span>
+                  <span class="emoji">${ICON[k.name] || '📚'}</span>
+                  <span class="in"><span><h5>${esc(k.name)}</h5><small>${n} course${n === 1 ? '' : 's'}</small></span><span class="go"><i class="bi bi-arrow-right"></i></span></span></a></div>`;
+            }).join('');
+            $('#topGrid').innerHTML = [...courses].sort((a, b) => b.rating - a.rating || b.enrolledCount - a.enrolledCount).slice(0, 3).map(c => card(c, mine.has(c.courseId))).join('');
+        })();
+    </script>
+</body>
+
+</html>
