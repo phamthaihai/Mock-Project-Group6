@@ -82,7 +82,7 @@ public class UserService {
             passwordOk = rawPassword.equals(stored);
         }
 
-        if (!passwordOk || user.getStatus() != UserStatus.ACTIVE) {
+        if (!passwordOk || user.getStatus() != UserStatus.ACTIVE || Boolean.TRUE.equals(user.getLocked())) {
             return null;
         }
 
@@ -134,7 +134,7 @@ public class UserService {
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
 
         user.setPasswordResetTokenHash(hashPasswordResetToken(token));
-        user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusSeconds(5));
+        user.setPasswordResetTokenExpiresAt(LocalDateTime.now().plusMinutes(10));
         userRepository.save(user);
         return Optional.of(token);
     }

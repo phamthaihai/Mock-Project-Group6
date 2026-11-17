@@ -5,7 +5,7 @@
   <a class="navbar-brand fw-bold" th:href="@{/}"><i class="bi bi-mortarboard-fill"></i> Skill<span>Trail</span></a>
   <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#courseNav"><span class="navbar-toggler-icon"></span></button>
   <div class="collapse navbar-collapse" id="courseNav">
-    <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" th:href="@{/courses}">Explore courses</a></li><li class="nav-item"><a class="nav-link" th:href="@{/my-learning}">My Learning</a></li><li class="nav-item"><a class="nav-link" th:href="@{/my-courses}">My Created Courses</a></li></ul>
+    <ul class="navbar-nav me-auto"><li class="nav-item"><a class="nav-link" th:href="@{/courses}">Explore courses</a></li><li class="nav-item"><a class="nav-link" th:href="@{/my-learning}">My Learning</a></li><li class="nav-item"><a class="nav-link" th:href="@{/my-courses}">My Created Courses</a></li><li class="nav-item" th:if="${currentUser != null and currentUser.role != null and (currentUser.role.name == 'ADMIN' or currentUser.role.name == 'MANAGER')}"><a class="nav-link" th:href="@{/admin}"><i class="bi bi-shield-lock"></i> Admin</a></li></ul>
     <a th:if="${currentUser != null}" class="user-chip text-reset text-decoration-none me-2" th:href="@{/user-profile}"><span>Hi, <span th:text="${currentUser.fullName}">User</span></span></a>
     <a th:if="${currentUser != null}" class="btn btn-outline-light btn-sm" th:href="@{/logout}">Logout</a>
     <a th:if="${currentUser == null}" class="btn btn-outline-light btn-sm me-2" th:href="@{/login}">Login</a>

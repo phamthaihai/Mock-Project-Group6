@@ -31,7 +31,7 @@ public class LoginController {
                 String roleName = currentUser.getRole().getName();
                 if ("ADMIN".equalsIgnoreCase(roleName)
                         || "MANAGER".equalsIgnoreCase(roleName)) {
-                    return "redirect:/"; // no /admin/dashboard page exists yet; redirecting there looped back to /login
+                    return "redirect:/admin";
                 }
             }
             return "redirect:/";
@@ -77,7 +77,7 @@ public class LoginController {
             String roleName = user.getRole().getName();
             if ("ADMIN".equalsIgnoreCase(roleName)
                     || "MANAGER".equalsIgnoreCase(roleName)) {
-                return "redirect:/"; // no /admin/dashboard page exists yet; redirecting there looped back to /login
+                return "redirect:/admin";
             }
         }
         return "redirect:/";

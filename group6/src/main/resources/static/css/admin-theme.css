@@ -1,0 +1,178 @@
+/* ===== Theme toggle button (both themes) ===== */
+.theme-toggle {
+    width: 34px;
+    height: 31px;
+    padding: 0;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fcd34d;
+    transition: background 0.2s, transform 0.2s;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.14); transform: rotate(15deg); }
+
+/* ===== Google button ===== */
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+.or-sep { display: flex; align-items: center; gap: 0.8rem; margin: 1rem 0; color: #9aa4d6; font-size: 0.8rem; }
+.or-sep::before, .or-sep::after { content: ''; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.15); }
+
+/* ===================================================================================
+   LIGHT THEME. Everything below only applies when <html data-bs-theme="light">.
+   Dark mode (the default) is not touched.
+   =================================================================================== */
+html[data-bs-theme="light"] {
+    --bs-body-color: #1a1f3d;
+    --bs-body-color-rgb: 26, 31, 61;
+    --bs-body-bg: #f3f5ff;
+    --bs-body-bg-rgb: 243, 245, 255;
+    --bs-secondary-color: rgba(26, 31, 61, 0.68);
+    --bs-border-color: rgba(26, 31, 61, 0.14);
+}
+html[data-bs-theme="light"] body { background: #f3f5ff; color: #1a1f3d; }
+html[data-bs-theme="light"] { --bs-heading-color: inherit; }
+
+/* navbar colours set explicitly so they never depend on a Bootstrap build / theme */
+html[data-bs-theme="light"] .navbar {
+    --bs-navbar-color: rgba(26, 31, 61, 0.72);
+    --bs-navbar-hover-color: #ff5fa2;
+    --bs-navbar-active-color: #ff5fa2;
+    --bs-navbar-brand-color: #1a1f3d;
+    --bs-navbar-brand-hover-color: #1a1f3d;
+    --bs-navbar-toggler-border-color: rgba(26, 31, 61, 0.25);
+}
+
+/* animated background */
+html[data-bs-theme="light"] .bg { background: linear-gradient(135deg, #f3f5ff, #ebe7ff, #f3f5ff); }
+html[data-bs-theme="light"] .bg i { opacity: 0.2; }
+html[data-bs-theme="light"] .bg i:nth-child(4) { opacity: 0.14; }
+
+/* panels, navbar, footer */
+html[data-bs-theme="light"] .glass {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(26, 31, 61, 0.1);
+    box-shadow: 0 6px 24px rgba(60, 60, 120, 0.07);
+}
+html[data-bs-theme="light"] nav.glass,
+html[data-bs-theme="light"] footer.glass { box-shadow: none; }
+html[data-bs-theme="light"] footer a { color: #4a4f78; }
+html[data-bs-theme="light"] footer a:hover { color: var(--brand2); }
+html[data-bs-theme="light"] .or-sep { color: #6a7098; }
+html[data-bs-theme="light"] .or-sep::before, html[data-bs-theme="light"] .or-sep::after { background: rgba(26, 31, 61, 0.16); }
+
+/* toggle / mode / user chip */
+html[data-bs-theme="light"] .theme-toggle { border-color: rgba(26, 31, 61, 0.2); background: rgba(26, 31, 61, 0.05); color: #5b4bd6; }
+html[data-bs-theme="light"] .theme-toggle:hover { background: rgba(26, 31, 61, 0.1); }
+html[data-bs-theme="light"] .mode-toggle { color: #0e7490; border-color: rgba(14, 116, 144, 0.4); background: rgba(34, 211, 238, 0.12); }
+html[data-bs-theme="light"] .mode-toggle:hover { color: #0b5d73; background: rgba(34, 211, 238, 0.24); }
+html[data-bs-theme="light"] .user-chip { border-color: rgba(26, 31, 61, 0.14); background: rgba(26, 31, 61, 0.04); }
+html[data-bs-theme="light"] .nav-avatar { border-color: rgba(26, 31, 61, 0.2); }
+html[data-bs-theme="light"] .nav-avatar-fallback,
+html[data-bs-theme="light"] .avatar,
+html[data-bs-theme="light"] .step-icon,
+html[data-bs-theme="light"] .steps-list li::before,
+html[data-bs-theme="light"] .cta { color: #fff; }
+
+/* buttons: white-outline buttons need a dark outline on a light page */
+html[data-bs-theme="light"] .btn-outline-light { color: #1a1f3d; border-color: rgba(26, 31, 61, 0.35); }
+html[data-bs-theme="light"] .btn-outline-light:hover,
+html[data-bs-theme="light"] .btn-outline-light:focus,
+html[data-bs-theme="light"] .btn-outline-light.show { color: #fff; background: #1a1f3d; border-color: #1a1f3d; }
+/* ...but not on image banners, which keep their dark overlay */
+html[data-bs-theme="light"] .hero-slide .btn-outline-light,
+html[data-bs-theme="light"] .ev-hero .btn-outline-light { color: #fff; border-color: rgba(255, 255, 255, 0.75); }
+html[data-bs-theme="light"] .hero-slide .btn-outline-light:hover,
+html[data-bs-theme="light"] .ev-hero .btn-outline-light:hover { color: #1a1f3d; background: #fff; border-color: #fff; }
+
+/* forms */
+html[data-bs-theme="light"] .form-control,
+html[data-bs-theme="light"] .form-select { background-color: #fff; border-color: rgba(26, 31, 61, 0.2); color: #1a1f3d; }
+html[data-bs-theme="light"] .form-select { color-scheme: light; }
+html[data-bs-theme="light"] .form-control::placeholder { color: rgba(26, 31, 61, 0.45); }
+html[data-bs-theme="light"] .form-control:focus,
+html[data-bs-theme="light"] .form-select:focus { background-color: #fff; color: #1a1f3d; border-color: var(--brand1); }
+html[data-bs-theme="light"] .form-select option { background-color: #fff; color: #1a1f3d; }
+html[data-bs-theme="light"] .form-select option:checked,
+html[data-bs-theme="light"] .form-select option:hover { background: #6d5dfc linear-gradient(0deg, #6d5dfc, #6d5dfc); color: #fff; }
+
+/* hero slider and course-detail banner keep their dark photo overlay, so their text stays light */
+html[data-bs-theme="light"] .hero-slide,
+html[data-bs-theme="light"] .ev-hero { color: #e8ecff; }
+html[data-bs-theme="light"] .ev-hero .text-secondary { color: rgba(232, 236, 255, 0.7) !important; }
+html[data-bs-theme="light"] .ev-cat { color: #fff; }
+html[data-bs-theme="light"] .ev:hover { box-shadow: 0 16px 36px rgba(40, 40, 90, 0.2); }
+
+/* "back" links use text-white-50, which is invisible on a light page (still light inside banners/video) */
+html[data-bs-theme="light"] .text-white-50 { color: rgba(26, 31, 61, 0.62) !important; }
+html[data-bs-theme="light"] .ev-hero .text-white-50,
+html[data-bs-theme="light"] .hero-slide .text-white-50,
+html[data-bs-theme="light"] .video-box .text-white-50,
+html[data-bs-theme="light"] .player .text-white-50 { color: rgba(255, 255, 255, 0.6) !important; }
+
+/* chips */
+html[data-bs-theme="light"] .chip { border-color: rgba(26, 31, 61, 0.18); background: rgba(255, 255, 255, 0.75); color: #1a1f3d; }
+html[data-bs-theme="light"] .chip:hover,
+html[data-bs-theme="light"] .chip.active { background: var(--grad); border-color: transparent; color: #fff; }
+html[data-bs-theme="light"] .meta-chip { background: rgba(26, 31, 61, 0.06); border-color: rgba(26, 31, 61, 0.12); }
+html[data-bs-theme="light"] .ev-hero .meta-chip { background: rgba(255, 255, 255, 0.12); border-color: rgba(255, 255, 255, 0.18); }
+html[data-bs-theme="light"] .tagchip { background: rgba(109, 93, 252, 0.1); border-color: rgba(109, 93, 252, 0.35); }
+
+/* course page: lessons list, timeline, accordion */
+html[data-bs-theme="light"] .timeline { border-left-color: rgba(26, 31, 61, 0.18); }
+html[data-bs-theme="light"] .lesson { color: #5a6190; border-top-color: rgba(26, 31, 61, 0.08); }
+html[data-bs-theme="light"] .lesson.done,
+html[data-bs-theme="light"] .lesson.active { color: #1a1f3d; }
+html[data-bs-theme="light"] .lesson.active { background: rgba(109, 93, 252, 0.14); }
+html[data-bs-theme="light"] .accordion { --bs-accordion-border-color: rgba(26, 31, 61, 0.12); }
+
+/* profile / my courses */
+html[data-bs-theme="light"] .profile-avatar-wrap { background: rgba(26, 31, 61, 0.03); border-color: rgba(26, 31, 61, 0.1); }
+html[data-bs-theme="light"] .profile-avatar { border-color: rgba(26, 31, 61, 0.15); box-shadow: 0 8px 30px rgba(40, 40, 90, 0.15); }
+html[data-bs-theme="light"] .course-progress-card { border-color: rgba(26, 31, 61, 0.1); }
+html[data-bs-theme="light"] .course-progress-card:hover { box-shadow: 0 16px 40px rgba(40, 40, 90, 0.16); }
+
+/* toasts, modal, notifications */
+html[data-bs-theme="light"] .lh-toast { background: rgba(255, 255, 255, 0.98); border-color: rgba(26, 31, 61, 0.1); box-shadow: 0 10px 30px rgba(40, 40, 90, 0.18); }
+html[data-bs-theme="light"] .lh-body span { color: #4a4f78; }
+html[data-bs-theme="light"] .lh-x { color: #6a7098; }
+html[data-bs-theme="light"] #confirmModal .modal-content { background: #fff; border-color: rgba(26, 31, 61, 0.1); }
+html[data-bs-theme="light"] .notif { border-bottom-color: rgba(26, 31, 61, 0.08); }
+html[data-bs-theme="light"] .cf-icon.primary { color: #5b4bd6; }
+
+/* checkout */
+html[data-bs-theme="light"] .pay-opt { border-color: rgba(26, 31, 61, 0.18); }
+
+/* learning page (learn.css) */
+html[data-bs-theme="light"] .learn-side .sec-title small,
+html[data-bs-theme="light"] .nav-item-row .mm { color: #6a7098; }
+html[data-bs-theme="light"] .nav-item-row { color: #3a3f68; }
+html[data-bs-theme="light"] .nav-item-row:hover:not(.locked) { background: rgba(26, 31, 61, 0.06); color: #1a1f3d; }
+html[data-bs-theme="light"] .nav-item-row.active { background: rgba(109, 93, 252, 0.16); color: #1a1f3d; }
+html[data-bs-theme="light"] .block p { color: #2b3052; }
+html[data-bs-theme="light"] .learn-bar { background: rgba(255, 255, 255, 0.94); border-color: rgba(26, 31, 61, 0.1); }
+
+/* quiz page (learn.css) */
+html[data-bs-theme="light"] .qdot { border-color: rgba(26, 31, 61, 0.3); color: #3a3f68; }
+html[data-bs-theme="light"] .qdot.answered { color: #1a1f3d; }
+html[data-bs-theme="light"] .qdot.ok,
+html[data-bs-theme="light"] .qdot.bad { color: #fff; }
+html[data-bs-theme="light"] .opt { border-color: rgba(26, 31, 61, 0.18); background: rgba(26, 31, 61, 0.03); }
+html[data-bs-theme="light"] .opt:hover:not(:disabled) { background: rgba(109, 93, 252, 0.1); }
+html[data-bs-theme="light"] .opt.sel { background: rgba(109, 93, 252, 0.18); }
+html[data-bs-theme="light"] .opt.sel .mk, html[data-bs-theme="light"] .opt.right .mk, html[data-bs-theme="light"] .opt.wrong .mk { color: #fff; }
+html[data-bs-theme="light"] .timer { background: rgba(26, 31, 61, 0.07); }
+html[data-bs-theme="light"] .timer.low { color: #b91c1c; background: rgba(239, 68, 68, 0.18); }
+html[data-bs-theme="light"] .score-ring { background: conic-gradient(var(--c, #22c55e) calc(var(--p) * 1%), rgba(26, 31, 61, 0.12) 0); }
+html[data-bs-theme="light"] .score-ring > div { background: #fff; }
+html[data-bs-theme="light"] .explain { background: rgba(26, 31, 61, 0.05); color: #3a3f68; }
+
+/* stats strip overlaps the dark hero: keep it solid enough to read */
+html[data-bs-theme="light"] .stats .glass { background: rgba(255, 255, 255, 0.94); }
+/* progress bars */
+html[data-bs-theme="light"] .progress { --bs-progress-bg: rgba(26, 31, 61, 0.1); }
+/* muted text: same readable tone whatever Bootstrap build / theme is loaded */
+html[data-bs-theme="light"] .text-secondary { color: rgba(26, 31, 61, 0.68) !important; }
+html[data-bs-theme="light"] .hero-slide .text-secondary,
+html[data-bs-theme="light"] .video-box .text-secondary,
+html[data-bs-theme="light"] .player .text-secondary { color: rgba(232, 236, 255, 0.72) !important; }

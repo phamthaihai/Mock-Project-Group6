@@ -30,6 +30,9 @@ public class User {
     @Enumerated(EnumType.STRING)
     private UserStatus status;
 
+    @Column(nullable = false)
+    private Boolean locked = false;
+
     private Boolean emailVerified;
     private String verifyToken;
     private LocalDateTime verifyTokenExpiresAt;
@@ -105,6 +108,14 @@ public class User {
 
     public void setStatus(UserStatus status) {
         this.status = status;
+    }
+
+    public Boolean getLocked() {
+        return locked;
+    }
+
+    public void setLocked(Boolean locked) {
+        this.locked = locked;
     }
 
     public Boolean getEmailVerified() {
