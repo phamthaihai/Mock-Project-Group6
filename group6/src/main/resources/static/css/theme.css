@@ -64,8 +64,6 @@ html[data-bs-theme="light"] .or-sep::before, html[data-bs-theme="light"] .or-sep
 /* toggle / mode / user chip */
 html[data-bs-theme="light"] .theme-toggle { border-color: rgba(26, 31, 61, 0.2); background: rgba(26, 31, 61, 0.05); color: #5b4bd6; }
 html[data-bs-theme="light"] .theme-toggle:hover { background: rgba(26, 31, 61, 0.1); }
-html[data-bs-theme="light"] .mode-toggle { color: #0e7490; border-color: rgba(14, 116, 144, 0.4); background: rgba(34, 211, 238, 0.12); }
-html[data-bs-theme="light"] .mode-toggle:hover { color: #0b5d73; background: rgba(34, 211, 238, 0.24); }
 html[data-bs-theme="light"] .user-chip { border-color: rgba(26, 31, 61, 0.14); background: rgba(26, 31, 61, 0.04); }
 html[data-bs-theme="light"] .nav-avatar { border-color: rgba(26, 31, 61, 0.2); }
 html[data-bs-theme="light"] .nav-avatar-fallback,

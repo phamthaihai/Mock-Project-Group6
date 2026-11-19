@@ -28,7 +28,6 @@
       <form id="f" class="auth-form" novalidate>
         <h2 class="mb-2">Verify your email</h2>
         <p class="small text-secondary mb-2" id="hint"></p>
-        <p class="small mb-3" id="demo"></p>
         <input name="code" class="form-control form-control-lg text-center mb-3" placeholder="6-digit code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" style="letter-spacing:.4em">
         <button class="btn btn-primary w-100">Verify</button>
         <button type="button" id="resend" class="btn btn-outline-secondary w-100 mt-2">Resend code</button>
@@ -42,16 +41,14 @@
     const q = new URLSearchParams(location.search), email = (q.get('email') || '').trim();
     if (!email) location.replace('signup.html');
     $('#hint').textContent = 'We sent a 6-digit code to ' + email + '. It expires in 10 minutes.';
-    const showDemo = c => { $('#demo').innerHTML = c ? 'Demo mode (no mailbox): your code is <b>' + esc(c) + '</b>' : ''; };
-    showDemo(sessionStorage.getItem('demoCode'));
 
     let wait = 0, timer;
     const tick = () => { $('#resend').disabled = wait > 0; $('#resend').textContent = wait > 0 ? 'Resend code (' + wait + 's)' : 'Resend code'; };
     const cooldown = s => { wait = s; tick(); clearInterval(timer); timer = setInterval(() => { if (--wait <= 0) clearInterval(timer); tick(); }, 1000); };
     async function resend(quiet) {
       try {
-        const r = await api('/auth/resend-code', 'POST', { email });
-        if (r.demoCode) sessionStorage.setItem('demoCode', r.demoCode); showDemo(r.demoCode); cooldown(60);
+        await api('/auth/resend-code', 'POST', { email });
+        cooldown(60);
         if (!quiet) toast('A new code has been sent');
       } catch (x) { toast(x.message || 'Could not resend the code', 'danger'); }
     }
@@ -62,7 +59,7 @@
       e.preventDefault();
       const code = $('#f').code.value.trim();
       if (!/^\d{6}$/.test(code)) return toast('Enter the 6-digit code', 'danger');
-      try { await api('/auth/verify-email', 'POST', { email, code }); sessionStorage.removeItem('demoCode'); flash('Email verified! Your account is ready. Please log in.'); location.href = 'login.html'; }
+      try { await api('/auth/verify-email', 'POST', { email, code }); flash('Email verified! Your account is ready. Please log in.'); location.href = 'login.html'; }
       catch (x) { toast(x.message || 'Verification failed', 'danger'); }
     };
   </script>

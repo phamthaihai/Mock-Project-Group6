@@ -1,1 +1,0 @@
-window.CONFIG={USE_MOCK:false,API_BASE:'/api',REQUEST_TIMEOUT:10000};

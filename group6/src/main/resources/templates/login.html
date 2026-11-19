@@ -15,8 +15,34 @@
 
 <body>
   <main class="auth flex-grow-1">
-    <aside class="auth-aside" style="--aside-img:url('https://picsum.photos/seed/learnhub-study/1000/1200')">
-      <i class="s s1"></i><i class="s s2"></i><i class="s s3"></i><i class="s s4"></i><i class="s s5"></i>
+    <aside class="auth-aside auth-aside--art">
+      <i class="s s1"></i><i class="s s5"></i>
+      <div class="trail-art" aria-hidden="true">
+      <svg class="trail-svg" viewBox="0 0 520 700" preserveAspectRatio="xMaxYMax meet" aria-hidden="true" focusable="false">
+        <defs>
+          <linearGradient id="hillA" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".26"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient>
+          <linearGradient id="hillB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity=".02"/></linearGradient>
+          <radialGradient id="sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
+        </defs>
+        <circle cx="420" cy="120" r="120" fill="url(#sun)"/>
+        <path d="M-900 700V470H-20C70 420 150 400 230 440S380 520 540 410V700Z" fill="url(#hillB)"/>
+        <path d="M-900 700V560H-20C80 520 170 560 260 540S430 470 540 520V700Z" fill="url(#hillA)"/>
+        <path d="M46 640 C230 640 110 520 250 500 C390 480 430 400 340 320 C250 240 300 190 420 120" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="26" stroke-linecap="round"/>
+        <path class="trail-dash" d="M46 640 C230 640 110 520 250 500 C390 480 430 400 340 320 C250 240 300 190 420 120" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="4" stroke-linecap="round" stroke-dasharray="1 13"/>
+        <g transform="translate(168 568)"><circle r="17" fill="#fff"/><circle r="17" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="6"/><path d="M-6 0.5l4.6 4.6L7 -4.5" fill="none" stroke="#7e22ce" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <g transform="translate(306 487)"><circle r="17" fill="#fff"/><circle r="17" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="6"/><path d="M-6 0.5l4.6 4.6L7 -4.5" fill="none" stroke="#7e22ce" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></g>
+        <g transform="translate(372 356)"><circle class="trail-pulse" r="17" fill="none" stroke="#fff" stroke-width="3"/><circle r="17" fill="#fff"/><circle r="8" fill="#db2777"/></g>
+        <g transform="translate(307 207)"><circle r="13" fill="rgba(255,255,255,.22)" stroke="rgba(255,255,255,.7)" stroke-width="2.5"/><circle r="4" fill="#fff" fill-opacity=".8"/></g>
+        <g transform="translate(420 120)">
+          <path d="M0 0V-62" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+          <path d="M2 -62h46l-12 15 12 15H2Z" fill="#fff"/>
+          <circle r="9" fill="#fff"/><circle r="4" fill="#db2777"/>
+        </g>
+      </svg>
+      <div class="trail-card tc-lesson"><span class="tc-ico ok"><i class="bi bi-check-lg"></i></span><div><b>Lesson 12 complete</b><small>Next: Quiz 3</small></div></div>
+      <div class="trail-card tc-progress"><span class="tc-ring" style="--p:72"><b>72%</b></span><div><b>Course progress</b><small>18 of 25 lessons</small></div></div>
+      <div class="trail-card tc-cert"><span class="tc-ico gold"><i class="bi bi-award-fill"></i></span><div><b>Certificate earned</b><small>Share it anywhere</small></div></div>
+    </div>
       <div class="position-relative" style="z-index:2">
         <a href="index.html" class="d-inline-flex align-items-center gap-2 mb-4 text-white text-decoration-none fw-bold fs-4"><b class="brand-mark"><i class="bi bi-mortarboard-fill"></i></b> SkillTrail</a>
         <h2>Welcome back</h2>
@@ -40,9 +66,6 @@
         <div class="or-sep"><span>or</span></div>
         <div id="gsi" class="mb-1"></div>
         <p class="small mt-3 mb-1">No account? <a href="signup.html">Sign up</a></p>
-        <p class="small text-secondary mb-2">Demo account (click to fill):</p>
-        <div class="d-flex gap-2 flex-wrap"><button type="button"
-            class="btn btn-sm btn-outline-light" data-fill="admin@gmail.com|123456">Admin</button></div>
       </form>
     </div></section>
   </main>
@@ -50,9 +73,6 @@
   <script src="js/common.js"></script>
   <script>
     if (state.user) location.href = 'index.html';
-    /* Demo admin: Mock mode keeps its own admin, Live API uses the admin from schema.sql */
-    if (CONFIG.USE_MOCK) $('[data-fill]').dataset.fill = 'admin@skilltrail.com|admin123';
-    $('#f').addEventListener('click', e => { const b = e.target.closest('[data-fill]'); if (!b) return; const [em, pw] = b.dataset.fill.split('|'); $('#f').email.value = em; $('#f').password.value = pw; });
     $('#f').onsubmit = async e => {
       e.preventDefault();
       try {
@@ -61,7 +81,7 @@
         const n = new URLSearchParams(location.search).get('next');
         location.href = n && /^[\w.\-]+\.html(\?[\w=&%.\-]*)?$/.test(n) ? n : r.user.role === 'ADMIN' ? 'admin.html' : 'index.html';
       } catch (x) {
-        if (x.status === 403 && /verify your email/i.test(x.message || '')) { sessionStorage.removeItem('demoCode'); flash('Please verify your email first. We are sending you a new code.'); return location.href = 'verify.html?resend=1&email=' + encodeURIComponent($('#f').email.value.trim()); }
+        if (x.status === 403 && /verify your email/i.test(x.message || '')) { flash('Please verify your email first. We are sending you a new code.'); return location.href = 'verify.html?resend=1&email=' + encodeURIComponent($('#f').email.value.trim()); }
         toast(x.message || 'Login failed', 'danger');
       }
     };

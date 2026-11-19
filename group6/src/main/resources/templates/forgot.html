@@ -53,7 +53,6 @@
         const r = await api('/auth/forgot-password', 'POST', { email });
         $('#f1').classList.add('d-none'); $('#f2').classList.remove('d-none');
         $('#hint').textContent = r.message;
-        if (r.demoCode) $('#hint').innerHTML += ' <br><b>Demo mode (no mailbox): your code is ' + esc(r.demoCode) + '</b>';
       } catch (x) { toast(x.message || 'Request failed', 'danger'); }
     };
     $('#f2').onsubmit = async e => {

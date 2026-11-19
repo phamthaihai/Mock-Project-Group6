@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <script src="js/theme.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="css/style.css" rel="stylesheet">
+  <link href="css/theme.css" rel="stylesheet">
+  <title>SkillTrail · Manage personal course</title>
+</head>
+
+<body>
+  <main class="container py-5" style="max-width:980px">
+    <a href="personal-courses.html" class="text-decoration-none"><i class="bi bi-arrow-left"></i> Personal courses</a>
+    <div id="root" class="mt-3"><div class="text-secondary">Loading…</div></div>
+  </main>
+
+  <div class="modal fade" id="lessonModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content glass">
+      <div class="modal-header"><h2 class="modal-title h5" id="lmTitle">Lesson</h2><button class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+      <div class="modal-body">
+        <div class="mb-3"><label class="form-label" for="lTitle">Lesson title *</label><input class="form-control" id="lTitle" maxlength="150"></div>
+        <div class="row g-3 mb-3">
+          <div class="col-md-6"><label class="form-label" for="lType">Type</label>
+            <select class="form-select" id="lType"><option value="TEXT">Study notes (text)</option><option value="VIDEO">Video link</option><option value="FILE">File / document link</option></select></div>
+          <div class="col-md-6"><label class="form-label" for="lMin">Minutes</label><input class="form-control" id="lMin" type="number" min="0" value="5"></div>
+        </div>
+        <div class="mb-3" id="lUrlBox"><label class="form-label" for="lUrl">Link (https://…) *</label><input class="form-control" id="lUrl" type="url" placeholder="https://..."></div>
+        <div><label class="form-label" for="lText">Notes</label><textarea class="form-control" id="lText" rows="8" placeholder="Write your study notes here"></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" id="lSave">Save lesson</button></div>
+    </div></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    if (guard('STUDENT')) (async () => {
+      const id = +new URLSearchParams(location.search).get('id');
+      const root = $('#root'), modal = bootstrap.Modal.getOrCreateInstance($('#lessonModal'));
+      let course, cats = [], editing = null; // editing = {sectionId} for a new lesson or {lessonId, sectionId} for an existing one
+      const fail = e => toast(e.message || 'Something went wrong', 'danger');
+      if (!id) return root.innerHTML = '<div class="alert alert-warning">No course selected.</div>';
+
+      async function load() {
+        course = await api('/instructor/courses/' + id);
+        document.title = 'SkillTrail · ' + course.title;
+        render();
+      }
+
+      const lessonRow = (s, l, i, n) => `<li class="list-group-item d-flex align-items-center gap-2 bg-transparent">
+        <i class="bi ${l.type === 'VIDEO' ? 'bi-play-circle' : l.type === 'FILE' ? 'bi-file-earmark-text' : 'bi-journal-text'}"></i>
+        <div class="flex-grow-1"><div>${esc(l.title)}</div><div class="small text-secondary">${esc(l.type)} · ${l.minutes} min</div></div>
+        <button class="btn btn-sm btn-outline-light" data-act="lup" data-id="${l.lessonId}" ${i === 0 ? 'disabled' : ''} aria-label="Move up"><i class="bi bi-arrow-up"></i></button>
+        <button class="btn btn-sm btn-outline-light" data-act="ldown" data-id="${l.lessonId}" ${i === n - 1 ? 'disabled' : ''} aria-label="Move down"><i class="bi bi-arrow-down"></i></button>
+        <button class="btn btn-sm btn-outline-light" data-act="ledit" data-id="${l.lessonId}" data-sec="${s.sectionId}" aria-label="Edit"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" data-act="ldel" data-id="${l.lessonId}" aria-label="Delete"><i class="bi bi-trash"></i></button></li>`;
+
+      function render() {
+        const secs = course.sections || [];
+        root.innerHTML = `
+          <div class="mb-4"><span class="eyebrow">PERSONAL STUDY SPACE</span><h1 class="display-6 fw-bold mt-2">${esc(course.title)}</h1>
+            ${visBadge(course.status)}
+            <div class="mt-3 d-flex gap-3 align-items-center flex-wrap">${course.lessonCount ? `<a class="btn btn-primary" href="learn.html?id=${id}"><i class="bi bi-play-fill"></i> Study this course</a>` : ''}
+              ${course.lessonCount ? visToggle(course) : '<span class="small text-secondary">Add a lesson to be able to make this course public.</span>'}</div>
+            ${visNote(course)}</div>
+          <section class="glass p-4 mb-4"><h2 class="h5 mb-3">Course details</h2>
+            <div class="mb-3"><label class="form-label" for="cTitle">Title *</label><input class="form-control" id="cTitle" maxlength="150" value="${esc(course.title)}"></div>
+            <div class="mb-3"><label class="form-label" for="cDesc">Description</label><textarea class="form-control" id="cDesc" rows="3">${esc(course.description)}</textarea></div>
+            <div class="row g-3">
+              <div class="col-md-5"><label class="form-label" for="cCat">Category</label><select class="form-select" id="cCat">${cats.map(c => `<option value="${c.categoryId}" ${c.categoryId === course.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+              <div class="col-md-3"><label class="form-label" for="cLevel">Level</label><select class="form-select" id="cLevel">${['Beginner', 'Intermediate', 'Advanced'].map(v => `<option ${v === course.level ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+              <div class="col-md-4"><label class="form-label" for="cImg">Thumbnail URL</label><input class="form-control" id="cImg" type="url" value="${esc(course.imageUrl || '')}" placeholder="https://..."></div>
+            </div>
+            <button class="btn btn-primary mt-3" data-act="save">Save details</button></section>
+          <section class="mb-4"><div class="d-flex justify-content-between align-items-center mb-3"><h2 class="h5 mb-0">Sections and lessons</h2></div>
+            ${secs.map(s => `<div class="glass p-3 mb-3"><div class="d-flex gap-2 align-items-center mb-2">
+                <input class="form-control" data-sec-title="${s.sectionId}" maxlength="150" value="${esc(s.title)}" aria-label="Section title">
+                <button class="btn btn-sm btn-outline-light" data-act="srename" data-id="${s.sectionId}">Rename</button>
+                <button class="btn btn-sm btn-outline-danger" data-act="sdel" data-id="${s.sectionId}" aria-label="Delete section"><i class="bi bi-trash"></i></button></div>
+              <ul class="list-group list-group-flush mb-2">${(s.lessons || []).map((l, i, a) => lessonRow(s, l, i, a.length)).join('') || '<li class="list-group-item bg-transparent text-secondary">No lessons yet</li>'}</ul>
+              <button class="btn btn-sm btn-outline-light" data-act="ladd" data-id="${s.sectionId}"><i class="bi bi-plus-lg"></i> Add lesson</button></div>`).join('') || '<div class="glass p-4 text-secondary mb-3">No sections yet. Add your first section below.</div>'}
+            <div class="input-group"><input class="form-control" id="newSection" maxlength="150" placeholder="New section title"><button class="btn btn-primary" data-act="sadd"><i class="bi bi-plus-lg"></i> Add section</button></div></section>
+          <section class="glass p-4 border border-danger-subtle"><h2 class="h6 text-danger">Danger zone</h2>
+            <p class="small text-secondary">Deleting this course also deletes your lessons, notes and progress.</p>
+            <button class="btn btn-outline-danger" data-act="cdel"><i class="bi bi-trash"></i> Delete course</button></section>`;
+      }
+
+      const findLesson = lid => { for (const s of course.sections) for (const l of s.lessons) if (l.lessonId === lid) return l; };
+      const syncType = () => $('#lUrlBox').classList.toggle('d-none', $('#lType').value === 'TEXT');
+      $('#lType').onchange = syncType;
+      function openLesson(sectionId, l) {
+        editing = { sectionId, lessonId: l?.lessonId };
+        $('#lmTitle').textContent = l ? 'Edit lesson' : 'Add lesson';
+        $('#lTitle').value = l?.title || ''; $('#lType').value = l?.type || 'TEXT'; $('#lMin').value = l ? l.minutes : 5;
+        $('#lUrl').value = l?.contentUrl || ''; $('#lText').value = l?.text || ''; syncType(); modal.show();
+      }
+      $('#lSave').onclick = async () => {
+        const body = { title: $('#lTitle').value.trim(), type: $('#lType').value, contentUrl: $('#lUrl').value.trim(), text: $('#lText').value, minutes: +$('#lMin').value || 0, preview: false };
+        if (!body.title) return toast('Lesson title is required', 'danger');
+        try {
+          if (editing.lessonId) await api('/lessons/' + editing.lessonId, 'PUT', body); else await api('/sections/' + editing.sectionId + '/lessons', 'POST', body);
+          modal.hide(); toast('Lesson saved'); await load();
+        } catch (e) { fail(e); }
+      };
+
+      root.addEventListener('change', async ev => {
+        const sw = ev.target.closest('[data-vis]'); if (!sw) return;
+        sw.disabled = true; const c = await changeVisibility(sw); sw.disabled = false;
+        if (c) try { await load(); } catch (e) { fail(e); }
+      });
+
+      root.addEventListener('click', async ev => {
+        const b = ev.target.closest('[data-act]'); if (!b) return;
+        const act = b.dataset.act, n = +b.dataset.id;
+        try {
+          if (act === 'save') {
+            const title = $('#cTitle').value.trim(); if (!title) return toast('Title is required', 'danger');
+            await api('/courses/' + id, 'PUT', { title, description: $('#cDesc').value, categoryId: +$('#cCat').value, level: $('#cLevel').value, imageUrl: $('#cImg').value.trim() });
+            toast('Course saved'); await load();
+          } else if (act === 'sadd') {
+            const t = $('#newSection').value.trim(); if (!t) return toast('Section title is required', 'danger');
+            await api('/courses/' + id + '/sections', 'POST', { title: t }); await load();
+          } else if (act === 'srename') {
+            const t = $(`[data-sec-title="${n}"]`).value.trim(); if (!t) return toast('Section title is required', 'danger');
+            await api('/sections/' + n, 'PUT', { title: t }); toast('Section renamed'); await load();
+          } else if (act === 'sdel') {
+            if (await confirmBox('Delete this section and all of its lessons?', { title: 'Delete section', confirmText: 'Delete' })) { await api('/sections/' + n, 'DELETE'); await load(); }
+          } else if (act === 'ladd') openLesson(n);
+          else if (act === 'ledit') openLesson(+b.dataset.sec, findLesson(n));
+          else if (act === 'ldel') {
+            if (await confirmBox('Delete this lesson?', { title: 'Delete lesson', confirmText: 'Delete' })) { await api('/lessons/' + n, 'DELETE'); await load(); }
+          } else if (act === 'lup' || act === 'ldown') { await api('/lessons/' + n + '/move', 'POST', { direction: act === 'lup' ? -1 : 1 }); await load(); }
+          else if (act === 'cdel') {
+            if (await confirmBox('Delete this personal course and your progress in it? This cannot be undone.', { title: 'Delete personal course', confirmText: 'Delete' })) {
+              await api('/courses/' + id, 'DELETE'); flash('Personal course deleted'); location.href = 'personal-courses.html';
+            }
+          }
+        } catch (e) { fail(e); }
+      });
+
+      try { cats = await api('/categories'); await load(); }
+      catch (e) { root.innerHTML = `<div class="alert alert-warning">${esc(e.status === 403 || e.status === 404 ? 'This personal course does not exist or is not yours.' : (e.message || 'Could not load the course'))}</div>`; }
+    })();
+  </script>
+</body>
+
+</html>

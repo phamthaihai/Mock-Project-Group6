@@ -34,7 +34,7 @@
         const id = new URLSearchParams(location.search).get('id');
         const me = state.user, isAdmin = me?.role === 'ADMIN';
         let c, prog, reviews = [], rate = 5;
-        const owner = () => me && c.instructor.userId === me.userId, staff = () => isAdmin || owner(), canOpen = () => prog.enrolled || staff();
+        const owner = () => me && c.instructor.userId === me.userId, staff = () => isAdmin || owner(), free = () => c.status === 'PUBLISHED' && c.price === 0, canOpen = () => prog.enrolled || staff() || free();
 
         function lessonRow(l) {
             const open = l.preview || canOpen(), dn = prog.completed.includes(l.lessonId);
@@ -64,7 +64,9 @@
                 (isAdmin && !prog.enrolled && c.status === 'PUBLISHED' ? '<button class="btn btn-outline-light w-100 mt-2" data-act="enroll">Enroll (no payment)</button>' : '') +
                 '';
             if (prog.enrolled) return '<div class="badge bg-success mb-3">✓ You are enrolled</div>' + progress + '<button class="btn btn-outline-danger w-100 mt-2" data-act="unenroll">Unenroll</button>';
-            return '<div class="price-big">' + money(c.price) + '</div><button class="btn btn-primary w-100 mt-3" data-act="enroll">' + (c.price === 0 ? 'Enroll for free' : 'Buy now') + '</button>' +
+            const guestFree = c.price === 0 && c.lessonCount ? '<a href="learn.html?id=' + id + '" class="btn btn-primary w-100 mt-3">Start learning' + (me ? '' : ' (no account needed)') + '</a>' : '';
+            const enrollLabel = c.price === 0 ? (me ? 'Enroll to save progress' : 'Log in to save progress') : (me ? 'Buy now' : 'Log in to buy');
+            return '<div class="price-big">' + money(c.price) + '</div>' + guestFree + '<button class="btn ' + (guestFree ? 'btn-outline-light mt-2' : 'btn-primary mt-3') + ' w-100" data-act="enroll">' + enrollLabel + '</button>' +
                 '<ul class="checks small mt-4 mb-0"><li><i class="bi bi-play-circle-fill"></i> ' + c.durationHours + ' hours of lessons</li><li><i class="bi bi-collection-play-fill"></i> ' + c.lessonCount + ' lessons in ' + c.sections.length + ' sections</li><li><i class="bi bi-infinity"></i> Lifetime access</li><li><i class="bi bi-award-fill"></i> Track your progress</li></ul>';
         }
         function draw() {

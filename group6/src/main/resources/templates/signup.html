@@ -54,7 +54,7 @@
   <script src="js/common.js"></script>
   <script>
     if (state.user) location.href = 'index.html';
-    /* Validation: same rules as the Mock API (validateSignup in js/common.js). Fields are checked as you type and again on submit. */
+    /* Validation: same rules as the server (validateSignup in js/common.js). Fields are checked as you type and again on submit. */
     const F = $('#f'), FIELDS = ['fullName', 'email', 'password', 'confirm'];
     const check = d => { const v = validateSignup(d); if (!d.confirm) v.confirm = 'Please confirm your password'; else if (d.confirm !== d.password) v.confirm = 'Passwords do not match'; return v; };
     const mark = (name, msg) => { const i = F[name]; i.classList.toggle('is-invalid', !!msg); i.classList.toggle('is-valid', !msg && !!i.value); i.nextElementSibling.textContent = msg || ''; };
@@ -69,7 +69,6 @@
       try {
         const r = await api('/auth/register', 'POST', d);
         if (r && r.verificationRequired) { // the account exists but stays unverified until the emailed code is entered
-          if (r.demoCode) sessionStorage.setItem('demoCode', r.demoCode); else sessionStorage.removeItem('demoCode');
           flash(r.emailSent === false ? 'Account created, but the email could not be sent. Press "Resend code".' : 'Account created. We sent a 6-digit code to your email.');
           location.href = 'verify.html?email=' + encodeURIComponent(d.email);
         } else { flash('You registered successfully! Your account was saved.'); location.href = 'login.html'; }

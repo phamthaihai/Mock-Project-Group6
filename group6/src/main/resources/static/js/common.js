@@ -1,9 +1,8 @@
-/* ===== CONFIG: set USE_MOCK=false when the Spring Boot backend is ready ===== */
+/* ===== CONFIG: the site always talks to the live Spring Boot API ===== */
 const CONFIG = {
-  // 'mock' (default) = everything runs on mock data in the browser; 'live' = everything goes to the real Spring Boot API. The navbar button switches.
-  USE_MOCK: localStorage.getItem('skilltrail-mode') !== 'live', API_BASE: '/api',
+  API_BASE: '/api',
   // Google sign-in: paste your OAuth "Web application" Client ID here (Google Cloud Console > APIs & Services > Credentials).
-  // Leave empty to use the demo dialog in Mock mode. A Client ID is public, it is safe to commit; never commit the client SECRET.
+  // A Client ID is public, it is safe to commit; never commit the client SECRET.
   GOOGLE_CLIENT_ID: '387986591955-kkcc9gpidmqiam05l6ash61vfl5sh27v.apps.googleusercontent.com'
 };
 const ICON = { Programming: '💻', Data: '📊', Design: '🎨', Business: '💼', Languages: '🌍', Marketing: '📣' };
@@ -46,16 +45,11 @@ function setSession(user, token, remember) { // remember omitted = keep the sess
 }
 function updateToken(t) { if (!t) return; state.token = t; [localStorage, sessionStorage].forEach(s => { if (s.getItem('token')) s.setItem('token', t); }); } // after a password change the server issues a new token
 function clearSession() { [localStorage, sessionStorage].forEach(s => { s.removeItem('user'); s.removeItem('token'); }); state.user = null; state.token = null; }
-function logout() { clearSession(); flash('Logged out', 'info'); location.href = 'index.html'; }
+async function logout() { try { await api('/auth/logout', 'POST'); } catch (e) { } clearSession(); flash('Logged out', 'info'); location.href = 'index.html'; } // the server ends the token first, then the browser forgets it
 /* ===== Google sign-in =====
-   Real Google: put your OAuth Web Client ID in CONFIG.GOOGLE_CLIENT_ID at the top of this file. Google gives the page a signed ID token (JWT)
-   which is POSTed to /auth/google. The real server MUST verify that token with Google; decoding it in the browser is only
-   done by the Mock API below. Without a Client ID, Mock mode shows a demo dialog that simulates the Google step. */
+   Put your OAuth Web Client ID in CONFIG.GOOGLE_CLIENT_ID at the top of this file. Google gives the page a signed ID token (JWT)
+   which is POSTed to /auth/google; the server verifies that token with Google. */
 const goNext = () => { const n = new URLSearchParams(location.search).get('next'); location.href = n && /^[\w.\-]+\.html(\?[\w=&%.\-]*)?$/.test(n) ? n : 'index.html'; };
-function decodeJwt(t) {
-  const b = (String(t).split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(decodeURIComponent(atob(b + '='.repeat((4 - b.length % 4) % 4)).split('').map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0')).join('')));
-}
 async function googleSignIn(credential) {
   try {
     const r = await api('/auth/google', 'POST', { credential });
@@ -68,31 +62,13 @@ const loadGsi = () => new Promise((ok, no) => {
   const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client?hl=en'; s.async = true;
   s.onload = ok; s.onerror = () => no(new Error('Could not load Google sign-in')); document.head.append(s);
 });
-const fakeGoogleToken = ({ name, email }) => {
-  const enc = o => btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  return enc({ alg: 'none' }) + '.' + enc({ iss: 'https://accounts.google.com', aud: 'demo', sub: 'demo-' + email, email, email_verified: true, name, picture: '', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.demo';
-};
-function demoGoogleDialog() {
-  let el = document.getElementById('gDemo');
-  if (!el) {
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal fade" id="gDemo" tabindex="-1"><div class="modal-dialog modal-dialog-centered" style="max-width:420px"><div class="modal-content glass"><form class="modal-body p-4" id="gDemoForm">
-      <div class="d-flex align-items-center gap-2 mb-2">${GOOGLE_G}<h5 class="m-0">Sign in with Google</h5></div>
-      <p class="small text-secondary">Demo mode: no Google Client ID is set (<code>CONFIG.GOOGLE_CLIENT_ID</code> in <code>js/common.js</code>), so this dialog stands in for the Google account step.</p>
-      <input name="name" class="form-control mb-2" placeholder="Name on the Google account" required>
-      <input name="email" type="email" class="form-control mb-3" placeholder="name@gmail.com" required>
-      <div class="d-flex gap-2"><button type="button" class="btn btn-outline-light flex-fill" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary flex-fill">Continue</button></div></form></div></div></div>`);
-    el = document.getElementById('gDemo');
-    el.querySelector('form').onsubmit = e => { e.preventDefault(); const f = formData(e.target); bootstrap.Modal.getOrCreateInstance(el).hide(); googleSignIn(fakeGoogleToken(f)); };
-  }
-  bootstrap.Modal.getOrCreateInstance(el).show();
-}
 async function initGoogleButton(box) {
   if (!box) return;
   const id = CONFIG.GOOGLE_CLIENT_ID;
   const plain = () => {
     box.innerHTML = `<button type="button" class="btn btn-outline-light w-100 google-btn">${GOOGLE_G} Continue with Google</button>`;
     box.firstChild.onclick = () => id ? toast('Google sign-in could not be loaded. Check your connection.', 'danger')
-      : CONFIG.USE_MOCK ? demoGoogleDialog() : toast('Google sign-in is not configured. Set CONFIG.GOOGLE_CLIENT_ID in js/common.js.', 'warning');
+      : toast('Google sign-in is not configured. Set CONFIG.GOOGLE_CLIENT_ID in js/common.js.', 'warning');
   };
   if (!id) return plain();
   try {
@@ -103,7 +79,7 @@ async function initGoogleButton(box) {
   } catch (e) { plain(); }
 }
 
-/* ===== Sign-up validation: one rule set used by signup.html (inline messages) AND by the Mock API (and to be mirrored by the Spring Boot DTO) ===== */
+/* ===== Sign-up validation: one rule set used by signup.html (inline messages) and mirrored by the Spring Boot SignupValidator ===== */
 const SIGNUP_RULES = {
   fullName: v => { v = String(v || '').trim(); return !v ? 'Full name is required' : v.length < 2 ? 'Full name must be at least 2 characters' : v.length > 100 ? 'Full name must be at most 100 characters' : !/^[\p{L}][\p{L} .'\-]*$/u.test(v) ? 'Full name can only contain letters, spaces, . \' and -' : ''; },
   email: v => { v = String(v || '').trim(); return !v ? 'Email is required' : v.length > 150 ? 'Email must be at most 150 characters' : !/^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/.test(v) ? 'Enter a valid email, for example name@gmail.com' : ''; },
@@ -122,13 +98,18 @@ function guard(...roles) {
 
 /* ===== API LAYER ===== */
 async function api(path, method = 'GET', body) {
-  if (CONFIG.USE_MOCK) { await new Promise(r => setTimeout(r, 100)); return mock(method, path, body); }
   const res = await fetch(CONFIG.API_BASE + path, {
     method,
     headers: { 'Content-Type': 'application/json', ...(state.token && { Authorization: 'Bearer ' + state.token }) },
     body: body ? JSON.stringify(body) : undefined
   });
-  if (!res.ok) { const e = await res.json().catch(() => ({})); throw { status: res.status, message: e.message || res.statusText }; }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({})), message = e.message || res.statusText;
+    if (res.status === 403 && state.user && /banned/i.test(message)) { // an admin banned this account while it was signed in: end the session
+      clearSession(); flash(message, 'danger'); location.href = 'login.html'; await new Promise(() => {});
+    }
+    throw { status: res.status, message };
+  }
   return res.status === 204 ? null : res.json();
 }
 
@@ -296,538 +277,26 @@ const CERT_CSS = `.cert-wrap{container-type:inline-size;width:100%}
 .cert-course{font-size:2.2em;font-weight:700;line-height:1.25;max-width:100%}
 .cert-foot{display:flex;justify-content:space-around;width:100%}.cert-foot b{display:block;font-size:1.1em}.cert-foot small{color:#777;font-size:.9em}`;
 
-const NAMES = ['Minh Anh Pham', 'Daniel Kim', 'Hoa Nguyen', 'Sofia Alvarez', 'Tuan Le', 'Aisha Khan', 'Lucas Meyer', 'Thao Vo', 'Priyank Shah', 'Linh Dang'];
-const TPL = [
-  { r: 5, t: c => 'Great course! ' + c.instructor + ' explains everything step by step and the examples are easy to follow.' },
-  { r: 5, t: c => 'Exactly what I needed for my job. I applied the lessons to a real project within a week.' },
-  { r: 5, t: c => 'The curriculum is well structured and the practice tasks really help the ideas stick.' },
-  { r: 4, t: c => 'Good value for the price. I would love a few more advanced exercises, but overall very satisfied.' },
-  { r: 5, t: c => 'I started as a complete beginner and finished with real confidence. Highly recommended!' },
-  { r: 4, t: c => 'Clear, practical and well paced. The slides and resources are a nice bonus.' },
-  { r: 3, t: c => 'Solid content. A few sections moved quickly for me, but replaying the lessons helped.' },
-  { r: 5, t: c => 'Best online course I have taken this year. The instructor really knows the subject.' },
-  { r: 5, t: c => 'The ' + c.title + ' lessons are organised logically, so I always knew what to learn next.' },
-  { r: 4, t: c => 'Friendly teaching style and useful practice tasks. I finished the whole course in two weeks.' }
-];
-/* ===== MOCK BACKEND (localStorage). Delete when the real API is live. Response shapes = API.md ===== */
-function seed(oldUsers) {
-  let seedN = 11; const rnd = () => (seedN = seedN * 16807 % 2147483647) / 2147483647;
-  const shuffle = a => a.map(v => [rnd(), v]).sort((x, y) => x[0] - y[0]).map(x => x[1]);
-  const users = (oldUsers || []).map(u => u.role === 'INSTRUCTOR' ? { ...u, role: 'STUDENT', author: true, locked: true } : ({ ...u, role: u.role === 'USER' ? 'STUDENT' : u.role, locked: !!u.locked }));
-  let maxId = Math.max(100, ...users.map(u => u.userId));
-  const account = (email, fullName, role, pw = '123456') => { let u = users.find(x => x.email === email); if (!u) users.push(u = { userId: ++maxId, fullName, email, password: pw, role, locked: false }); return u; };
-  // course authors: the teacher shown on a course. They are profiles only (no login, no role), not accounts people sign in with
-  const author = (email, fullName) => { const u = account(email, fullName, 'STUDENT'); u.author = true; u.locked = true; return u; };
-  const admin = account('admin@skilltrail.com', 'Admin', 'ADMIN', 'admin123');
-  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-  const raw = [
-    {
-      title: 'Java Full-Stack Bootcamp', category: 'Programming', level: 'Intermediate', instructor: 'Nguyen Van An', hours: 48, lang: 'English', price: 1290000, rating: 4.8, students: 120, kw: 'coding,programming',
-      description: 'Go from Java basics to a deployed full-stack app: Spring Boot REST APIs, SQL Server, JWT security and a responsive front-end.', tagline: 'Build and ship a real full-stack application.',
-      learn: ['Design REST APIs with Spring Boot', 'Model data with JPA and SQL Server', 'Secure apps with JWT and roles', 'Build a responsive front-end with fetch'], req: ['Basic programming knowledge', 'A laptop with JDK 21 installed'],
-      skills: ['Spring Boot', 'REST', 'JPA', 'SQL Server', 'JWT', 'Git'], bio: 'Senior backend engineer with 10 years of experience building enterprise Java systems and mentoring junior developers.',
-      cur: ['Java refresher::OOP essentials|18;Collections and streams|22;Exceptions and testing|15', 'Spring Boot REST::Controllers and services|25;Validation and error handling|20;Swagger documentation|12', 'Data and security::JPA with SQL Server|28;Authentication with JWT|30;Role-based access|18', 'Capstone::Connect the front-end|24;Deploy the app|16']
-    },
-    {
-      title: 'Intro to Web Development', category: 'Programming', level: 'Beginner', instructor: 'Le Thu Ha', hours: 12, lang: 'English', price: 0, rating: 4.6, students: 300, kw: 'laptop,webdesign',
-      description: 'Learn HTML, CSS and JavaScript from zero and publish your first responsive website.', tagline: 'Your first website in a weekend. Free.',
-      learn: ['Structure pages with semantic HTML', 'Style layouts with CSS and Bootstrap', 'Add interactivity with JavaScript', 'Publish a site to the web'], req: ['No experience needed', 'Any computer and a browser'],
-      skills: ['HTML', 'CSS', 'Bootstrap', 'JavaScript'], bio: 'Front-end developer and teacher who has helped over 5,000 beginners write their first line of code.',
-      cur: ['HTML basics::Page structure|10;Forms and tables|14', 'CSS and Bootstrap::Selectors and layout|16;Responsive design|18', 'JavaScript::DOM and events|20;Fetching data|15']
-    },
-    {
-      title: 'Docker & DevOps Essentials', category: 'Programming', level: 'Intermediate', instructor: 'Marcus Reyes', hours: 20, lang: 'English', price: 790000, rating: 4.7, students: 90, kw: 'server,datacenter',
-      description: 'Containerize applications, automate builds and deploy with confidence using Docker, CI/CD and cloud basics.', tagline: 'Ship faster with containers and pipelines.',
-      learn: ['Write Dockerfiles and compose files', 'Automate tests with CI/CD', 'Deploy containers to the cloud', 'Monitor and troubleshoot services'], req: ['Comfort with the command line', 'One programming language'],
-      skills: ['Docker', 'CI/CD', 'Linux', 'Cloud'], bio: 'Cloud engineer who runs production platforms serving millions of requests per day.',
-      cur: ['Containers::Images and containers|20;Dockerfile deep dive|25;Docker Compose|18', 'Pipelines::Git workflows|15;Build and test automation|28', 'Deploy::Cloud deployment|30;Monitoring basics|16']
-    },
-    {
-      title: 'Machine Learning Foundations', category: 'Data', level: 'Intermediate', instructor: 'Dr. Linh Tran', hours: 36, lang: 'English', price: 1490000, rating: 4.9, students: 150, kw: 'artificialintelligence,technology',
-      description: 'Understand the core ideas behind machine learning and build, evaluate and deploy your first models in Python.', tagline: 'From data to models that actually work.',
-      learn: ['Prepare and explore real datasets', 'Train regression and classification models', 'Evaluate models and avoid overfitting', 'Serve a model behind a simple API'], req: ['Basic Python', 'High-school level maths'],
-      skills: ['Python', 'scikit-learn', 'Pandas', 'Model evaluation'], bio: 'Machine learning researcher turned industry practitioner, with a PhD in applied statistics.',
-      cur: ['Foundations::What is machine learning|12;Data preparation|26;Exploratory analysis|24', 'Core models::Linear regression|28;Classification|30;Trees and ensembles|32', 'In practice::Evaluation and tuning|26;Deploying a model|22']
-    },
-    {
-      title: 'SQL & Data Analysis', category: 'Data', level: 'Beginner', instructor: 'Priya Nair', hours: 18, lang: 'English', price: 450000, rating: 4.6, students: 210, kw: 'data,analytics',
-      description: 'Query, clean and summarise data with SQL, then turn results into clear dashboards and insights.', tagline: 'Ask better questions of your data.',
-      learn: ['Write SELECT, JOIN and GROUP BY queries', 'Clean messy data', 'Design simple relational schemas', 'Present findings with charts'], req: ['No prior experience', 'SQL Server or any SQL database'],
-      skills: ['SQL', 'T-SQL', 'Data cleaning', 'Dashboards'], bio: 'Data analyst who has built reporting for retail and fintech teams.',
-      cur: ['SQL basics::SELECT and filtering|14;Joins|22;Aggregations|20', 'Working with data::Cleaning data|18;Subqueries and CTEs|24', 'Insights::Designing a schema|16;Building a dashboard|26']
-    },
-    {
-      title: 'UI/UX Design Essentials', category: 'Design', level: 'Beginner', instructor: 'Mai Anh', hours: 24, lang: 'English', price: 790000, rating: 4.7, students: 130, kw: 'design,interface',
-      description: 'Learn the full design process: research, wireframes, visual design and prototyping, with a portfolio project.', tagline: 'Design products people love to use.',
-      learn: ['Run quick user research', 'Create wireframes and flows', 'Apply colour, type and layout', 'Prototype and test your design'], req: ['No experience needed', 'A free Figma account'],
-      skills: ['Figma', 'Wireframing', 'Prototyping', 'Usability testing'], bio: 'Product designer with 8 years of experience across fintech and e-commerce apps.',
-      cur: ['Research::Understanding users|15;Personas and journeys|18', 'Design::Wireframes|22;Visual design basics|26;Design systems|20', 'Deliver::Prototyping|24;Usability testing|18']
-    },
-    {
-      title: 'Digital Marketing Masterclass', category: 'Marketing', level: 'Beginner', instructor: 'Khanh Vy', hours: 16, lang: 'English', price: 650000, rating: 4.5, students: 180, kw: 'marketing,socialmedia',
-      description: 'Plan and run campaigns across search, social and email, and measure what actually drives growth.', tagline: 'Grow an audience and measure the results.',
-      learn: ['Build a simple marketing funnel', 'Run search and social campaigns', 'Write emails that convert', 'Read analytics and report ROI'], req: ['No experience needed'],
-      skills: ['SEO', 'Social ads', 'Email marketing', 'Analytics'], bio: 'Growth marketer who has scaled several local brands from zero to national reach.',
-      cur: ['Strategy::Funnels and goals|14;Audience research|16', 'Channels::Search and SEO|24;Social media ads|26;Email marketing|18', 'Measure::Analytics and reporting|22']
-    },
-    {
-      title: 'Business English for Professionals', category: 'Languages', level: 'Intermediate', instructor: 'Emma Walker', hours: 30, lang: 'English', price: 890000, rating: 4.8, students: 260, kw: 'meeting,office',
-      description: 'Communicate clearly in meetings, emails and negotiations, with real workplace scenarios and feedback.', tagline: 'Speak and write with confidence at work.',
-      learn: ['Run and join meetings in English', 'Write clear professional emails', 'Handle calls and small talk', 'Negotiate and present ideas'], req: ['Intermediate English (B1 or above)'],
-      skills: ['Speaking', 'Email writing', 'Presenting', 'Negotiation'], bio: 'Certified English trainer with 12 years coaching teams at international companies.',
-      cur: ['Everyday work::Meetings and discussions|20;Professional emails|18', 'Speaking up::Phone and video calls|22;Small talk and networking|16', 'Advanced::Presentations|26;Negotiation|24']
-    },
-    {
-      title: 'Public Speaking & Presentation Skills', category: 'Business', level: 'Beginner', instructor: 'Samir Oduya', hours: 10, lang: 'English', price: 390000, rating: 4.7, students: 140, kw: 'speaker,presentation',
-      description: 'Overcome nerves, structure a message and deliver talks and pitches that keep an audience engaged.', tagline: 'Say it clearly. Be remembered.',
-      learn: ['Structure a talk with a clear message', 'Control nerves and body language', 'Design simple, effective slides', 'Handle questions with confidence'], req: ['No experience needed'],
-      skills: ['Storytelling', 'Slide design', 'Confidence', 'Q&A handling'], bio: 'Keynote speaker and coach who has trained thousands of professionals.',
-      cur: ['Foundations::Know your audience|12;Structuring your message|16', 'Delivery::Voice and body language|18;Managing nerves|14', 'Pitching::Designing slides|20;Handling Q&A|15']
-    },
-    {
-      title: 'React for Modern Web Apps', category: 'Programming', level: 'Intermediate', instructor: 'Hoang Minh', hours: 28, lang: 'English', price: 990000, rating: 4.7, students: 140, kw: 'code,screen',
-      description: 'Build fast, component-based interfaces with React, hooks and routing, and connect them to a REST API.', tagline: 'Build interactive UIs the modern way.',
-      learn: ['Build UIs from reusable components', 'Manage state with hooks', 'Add routing and forms', 'Fetch and display data from an API'], req: ['Solid HTML, CSS and JavaScript', 'Node.js installed'],
-      skills: ['React', 'Hooks', 'React Router', 'REST APIs'], bio: 'Front-end lead who has shipped React apps for startups and banks.',
-      cur: ['React basics::JSX and components|18;Props and state|24;Handling events|16', 'Hooks and data::useEffect and data fetching|28;Forms and validation|22', 'Real apps::Routing|20;Build a mini dashboard|30']
-    },
-    {
-      title: 'Data Visualization with Power BI', category: 'Data', level: 'Beginner', instructor: 'Nina Petrova', hours: 16, lang: 'English', price: 520000, rating: 4.6, students: 110, kw: 'dashboard,analytics',
-      description: 'Connect data sources, model them and build interactive dashboards that tell a clear story.', tagline: 'Turn spreadsheets into dashboards people use.',
-      learn: ['Import and clean data', 'Build relationships and measures', 'Design interactive dashboards', 'Publish and share reports'], req: ['Basic Excel skills'],
-      skills: ['Power BI', 'DAX', 'Data modelling', 'Dashboards'], bio: 'BI consultant who has built reporting for logistics and retail teams.',
-      cur: ['Getting started::Power BI overview|12;Connecting to data|18', 'Modelling::Relationships and tables|22;Intro to DAX|28', 'Dashboards::Visual best practices|20;Publishing reports|16']
-    },
-    {
-      title: 'Graphic Design with Photoshop & Illustrator', category: 'Design', level: 'Beginner', instructor: 'Carlos Mendes', hours: 26, lang: 'English', price: 750000, rating: 4.7, students: 95, kw: 'illustration,designer',
-      description: 'Learn the tools and design principles to create logos, posters and social media graphics.', tagline: 'Create visuals that stand out.',
-      learn: ['Master layers, masks and vector shapes', 'Apply colour, type and composition', 'Design logos and brand assets', 'Prepare files for print and web'], req: ['A computer that can run design software'],
-      skills: ['Photoshop', 'Illustrator', 'Branding', 'Typography'], bio: 'Brand designer with a decade of experience in agencies and freelance work.',
-      cur: ['Design basics::Colour and typography|18;Composition|16', 'Photoshop::Layers and masks|26;Photo retouching|24', 'Illustrator::Vector shapes|22;Designing a logo|28']
-    },
-    {
-      title: 'Project Management Fundamentals', category: 'Business', level: 'Beginner', instructor: 'Olivia Grant', hours: 14, lang: 'English', price: 590000, rating: 4.6, students: 125, kw: 'teamwork,planning',
-      description: 'Plan, run and deliver projects on time using proven methods, from scope and schedule to risks and reporting.', tagline: 'Deliver projects on time and on budget.',
-      learn: ['Define scope, goals and deliverables', 'Build realistic schedules and budgets', 'Manage risks and stakeholders', 'Run projects with Agile and Kanban'], req: ['No experience needed'],
-      skills: ['Planning', 'Agile', 'Risk management', 'Stakeholders'], bio: 'PMP-certified project manager who has led cross-functional teams of up to 40 people.',
-      cur: ['Foundations::What a project is|12;Defining scope|18', 'Planning::Schedules and budgets|24;Risks and stakeholders|20', 'Delivery::Agile and Kanban|22;Reporting progress|14']
-    },
-    {
-      title: 'IELTS Preparation (Academic)', category: 'Languages', level: 'Intermediate', instructor: 'Jacob Lee', hours: 32, lang: 'English', price: 1090000, rating: 4.8, students: 220, kw: 'studying,exam',
-      description: 'Targeted practice for all four IELTS Academic skills, with strategies, timed tasks and feedback.', tagline: 'Aim for the band score you need.',
-      learn: ['Understand each IELTS section and task type', 'Improve reading and listening speed', 'Write clear Task 1 and Task 2 answers', 'Speak fluently in all three parts'], req: ['Intermediate English (B1 or above)'],
-      skills: ['Reading', 'Listening', 'Academic writing', 'Speaking'], bio: 'IELTS examiner trainer who has coached hundreds of students to their target score.',
-      cur: ['Reading and listening::Reading strategies|28;Listening practice|26', 'Writing::Task 1 reports|30;Task 2 essays|32', 'Speaking::Parts 1 to 3|28;Mock test and feedback|35']
-    },
-    {
-      title: 'SEO & Content Marketing', category: 'Marketing', level: 'Intermediate', instructor: 'Thanh Huong', hours: 14, lang: 'English', price: 560000, rating: 4.5, students: 100, kw: 'laptop,marketing',
-      description: 'Rank higher on search engines and build content that attracts and converts the right audience.', tagline: 'Get found, then get chosen.',
-      learn: ['Research keywords and search intent', 'Optimise pages for search engines', 'Plan and write content that converts', 'Track rankings and traffic'], req: ['Basic marketing knowledge'],
-      skills: ['SEO', 'Keyword research', 'Content strategy', 'Analytics'], bio: 'SEO specialist who has grown organic traffic for e-commerce and education sites.',
-      cur: ['SEO basics::How search works|14;Keyword research|22', 'On-page SEO::Page optimisation|24;Technical SEO basics|20', 'Content::Content planning|18;Measuring results|16']
-    }
-  ];
-  const categories = CATS.map((name, i) => ({ categoryId: i + 1, name }));
-  let sid = 0, lid = 0, qid = 0, oid = 0, zid = 0, rid = 0;
-  const pool = [];
-  const LT = ['VIDEO', 'TEXT', 'VIDEO', 'FILE'];
-  const lesson = (title, minutes, n, course) => {
-    const type = LT[n % 4]; pool.push(title); return {
-      lessonId: ++lid, title, type, minutes, preview: false, position: n + 1,
-      contentUrl: type === 'VIDEO' ? 'https://example.com/videos/' + slug(title) : type === 'FILE' ? 'https://example.com/files/' + slug(title) + '.pdf' : null,
-      text: '## Objectives\n\n- Understand the key ideas behind ' + title.toLowerCase() + '\n- Apply them in a short hands-on exercise\n- Recognise common mistakes and best practices\n\n## Key notes\n\n- ' + title + ' is a core building block of ' + course + '.\n- Work through the examples step by step before moving on.\n\n## Practice\n\nComplete the short exercise for "' + title + '" and compare your result with the sample solution.'
-    };
-  };
-  const quiz = sec => {
-    const own = sec.lessons.map(l => l.title), last = own[own.length - 1];
-    const wrong = shuffle(pool.filter(t => !own.includes(t))).slice(0, 3); while (wrong.length < 3) wrong.push(['Introduction to cooking', 'History of art', 'Basic gardening'][wrong.length]);
-    const q = (text, ok, bad) => ({ questionId: ++qid, text, options: shuffle([ok, ...bad]).map(o => ({ optionId: ++oid, text: o, correct: o === ok })) });
-    return {
-      quizId: ++zid, title: sec.title + ' quiz', passScore: 70, maxAttempts: 0, questions: [q('Which lesson is part of "' + sec.title + '"?', own[0], wrong),
-      q('What is the best way to learn "' + last + '"?', 'Watch, then practise the example yourself', ['Skip the exercises', 'Only read the title', 'Memorise without trying']),
-      q('How is your course progress calculated?', 'Completed lessons divided by total lessons', ['By time spent on the site', 'By number of logins', 'By course price'])]
-    };
-  };
-  const sections = (cur, title) => { let n = 0; const s = cur.map((x, i) => { const [st, ls] = x.split('::'); return { sectionId: ++sid, title: st, position: i + 1, quiz: null, lessons: ls.split(';').map(l => { const [t, m] = l.split('|'); return lesson(t, +m, n++, title); }) }; }); s[0].lessons[0].preview = true; return s; };
-  const courses = raw.map((r, i) => {
-    const inst = author(r.instructor === 'Nguyen Van An' ? 'instructor@skilltrail.com' : slug(r.instructor).replace(/-/g, '.') + '@skilltrail.com', r.instructor), secs = sections(r.cur, r.title);
-    secs[0].quiz = quiz(secs[0]);
-    return {
-      courseId: i + 1, title: r.title, description: r.description, categoryId: CATS.indexOf(r.category) + 1, level: r.level, price: r.price, imageUrl: 'https://loremflickr.com/1200/700/' + r.kw + '?lock=' + (i + 21),
-      status: 'PUBLISHED', rejectReason: null, instructorId: inst.userId, language: r.lang, durationHours: r.hours, details: { tagline: r.tagline, learn: r.learn, requirements: r.req, skills: r.skills, instructorBio: r.bio }, sections: secs
-    };
-  });
-  const demo = author('instructor@skilltrail.com', 'Nguyen Van An');
-  [['Spring Security in Practice', 'DRAFT', null, 0], ['REST API Design Patterns', 'PENDING', null, 2], ['Intro to Cloud Computing', 'REJECTED', 'Please add more lessons and a clearer course description.', 2]].forEach((x, k) => courses.push({
-    courseId: 16 + k, title: x[0], description: 'Work in progress course created by the demo instructor.', categoryId: 1, level: 'Intermediate', price: k ? 0 : 490000, imageUrl: null,
-    status: x[1], rejectReason: x[2], instructorId: demo.userId, language: 'English', details: {}, sections: [{ sectionId: ++sid, title: 'Getting started', position: 1, quiz: null, lessons: x[3] ? [lesson('Welcome', 8, 0, x[0]), lesson('Core concepts', 15, 1, x[0])] : [] }]
-  }));
-  const enrollments = []; let eid = 0;
-  raw.forEach((r, i) => { for (let n = 0; n < r.students; n++) enrollments.push({ enrollmentId: ++eid, courseId: i + 1, userId: 0, pricePaid: r.price, paymentMethod: 'CARD', enrolledAt: isoLocal(new Date()) }); });
-  const reviews = []; raw.forEach((r, i) => shuffle(TPL).slice(0, 5).forEach((t, k) => reviews.push({
-    reviewId: ++rid, courseId: i + 1, userId: -(reviews.length + 1), userName: NAMES[(i + k) % NAMES.length], rating: t.r,
-    comment: t.t({ instructor: r.instructor, title: r.title }), createdAt: isoLocal(new Date(Date.now() - (3 + Math.floor(rnd() * 120)) * 864e5))
-  })));
-  const at = isoLocal(new Date()), notifications = [
-    { notificationId: 2, userId: demo.userId, message: 'Your course "Intro to Cloud Computing" was rejected: Please add more lessons and a clearer course description.', link: 'my-courses.html', read: false, createdAt: at },
-    { notificationId: 3, userId: admin.userId, message: '"REST API Design Patterns" is waiting for approval', link: 'courses.html', read: false, createdAt: at }];
-  return { users, categories, courses, enrollments, progress: [], attempts: [], reviews, notifications, eid, aid: 0, rid, nid: 3, sid, lid, qid, oid, zid };
-}
-
-function mock(method, path, body) {
-  let db = JSON.parse(localStorage.getItem('db6') || 'null');
-  if (!db) { db = seed((JSON.parse(localStorage.getItem('db5') || localStorage.getItem('db4') || 'null') || {}).users); localStorage.setItem('db6', JSON.stringify(db)); }
-  const err = (status, message) => { throw { status, message }; };
-  const need = (ok, message) => { if (!ok) err(400, message); };
-  { const ds = db.users.find(u => u.email === 'student@skilltrail.com'); if (ds) { // the demo student account was removed: drop it and everything it owned
-    const id = ds.userId; db.users = db.users.filter(u => u !== ds); db.enrollments = db.enrollments.filter(e => e.userId !== id); db.progress = db.progress.filter(p => p.userId !== id); db.attempts = db.attempts.filter(a => a.userId !== id);
-    db.reviews = db.reviews.filter(r => r.userId !== id); db.notifications = db.notifications.filter(n => n.userId !== id); if (db.cart) db.cart = db.cart.filter(x => x.userId !== id); if (db.tickets) db.tickets = db.tickets.filter(t => t.userId !== id); } }
-  db.users.forEach(u => { if (u.role === 'INSTRUCTOR') { u.role = 'STUDENT'; u.author = true; u.locked = true; } }); // data saved before the instructor role was removed
-  const uid = state.user?.userId, me = uid ? db.users.find(u => u.userId === uid) : null;
-  const admin = me?.role === 'ADMIN', now = () => isoLocal(new Date());
-  let m; const R = (mt, re) => mt === method && (m = path.match(re));
-  const course = id => db.courses.find(c => c.courseId === +id) || err(404, 'Course not found');
-  const own = c => c.instructorId === uid;
-  const manage = c => { if (!admin) err(403, 'You can only manage your own courses'); return c; };
-  const enrolledIn = id => !!uid && db.enrollments.some(e => e.courseId === id && e.userId === uid);
-  const lessonsOf = c => c.sections.flatMap(s => s.lessons);
-  const findSection = id => { for (const c of db.courses) { const s = c.sections.find(s => s.sectionId === +id); if (s) return { c, s }; } err(404, 'Section not found'); };
-  const findLesson = id => { for (const c of db.courses) for (const s of c.sections) { const l = s.lessons.find(l => l.lessonId === +id); if (l) return { c, s, l }; } err(404, 'Lesson not found'); };
-  const findQuiz = id => { for (const c of db.courses) for (const s of c.sections) if (s.quiz && s.quiz.quizId === +id) return { c, s, q: s.quiz }; err(404, 'Quiz not found'); };
-  const renum = a => a.forEach((x, i) => { x.position = i + 1; });
-  const move = (a, x, d) => { const i = a.indexOf(x), j = i + (d < 0 ? -1 : 1); if (j < 0 || j >= a.length) return;[a[i], a[j]] = [a[j], a[i]]; renum(a); };
-  const notify = (userId, message, link) => db.notifications.push({ notificationId: ++db.nid, userId, message, link: link || null, read: false, createdAt: now() });
-  /* activity log (feeds the admin console): type = ACCOUNT | PAYMENT | ENROLLMENT | COMPLETION */
-  const log = (type, action, o = {}) => {
-    const u = o.user, c = o.course;
-    db.logs.push({ logId: ++db.logid, type, action, userId: u?.userId ?? null, userName: u?.fullName ?? '', email: u?.email ?? o.email ?? '', courseId: c?.courseId ?? null, courseTitle: c?.title ?? '',
-      amount: o.amount ?? null, method: o.method ?? null, detail: o.detail || '', actor: o.actor === undefined ? (me?.fullName || '') : o.actor, createdAt: o.at || now() });
-    if (db.logs.length > 1000) db.logs.splice(0, db.logs.length - 1000);
-  };
-  if (!db.users.some(u => u.email === 'admin@gmail.com')) db.users.push({ userId: Math.max(100, ...db.users.map(u => u.userId)) + 1, fullName: 'Admin', email: 'admin@gmail.com', password: '123456', role: 'ADMIN', locked: false }); // same admin as database/schema.sql
-  if (!db.users.some(u => u.email === 'admin@skilltrail.com')) db.users.push({ userId: Math.max(100, ...db.users.map(u => u.userId)) + 1, fullName: 'Admin', email: 'admin@skilltrail.com', password: 'admin123', role: 'ADMIN', locked: false }); // demo admin on the login page, also for data saved before the rename
-  if (!db.tickets) { db.tickets = []; db.tid = 0; } // support tickets (Help & Support section)
-  if (!db.cart) db.cart = []; // shopping cart: [{userId, courseId, addedAt}]
-  if (!db.logs) {
-    db.logs = []; db.logid = 0; // first run after this update: rebuild enrollment and payment history from existing records
-    db.enrollments.forEach(e => {
-      const u = db.users.find(x => x.userId === e.userId), c = db.courses.find(x => x.courseId === e.courseId); if (!u || !c) return;
-      log('ENROLLMENT', 'ENROLLED', { user: u, course: c, at: e.enrolledAt, actor: u.fullName });
-      if (e.pricePaid > 0) log('PAYMENT', 'PAID', { user: u, course: c, amount: e.pricePaid, method: e.paymentMethod, at: e.enrolledAt, actor: u.fullName });
-    });
-  }
-  const pubUser = ({ password, ...u }) => ({ ...u, hasPassword: !!password, googleLinked: u.googleLinked ?? u.provider === 'GOOGLE' });
-  const rating = id => { const r = db.reviews.filter(x => x.courseId === id); return { rating: r.length ? Math.round(r.reduce((t, x) => t + x.rating, 0) / r.length * 10) / 10 : 0, ratingCount: r.length }; };
-  const view = c => {
-    const ls = lessonsOf(c), inst = db.users.find(u => u.userId === c.instructorId);
-    return {
-      courseId: c.courseId, title: c.title, description: c.description, categoryId: c.categoryId, category: db.categories.find(k => k.categoryId === c.categoryId)?.name || '', level: c.level, price: c.price, imageUrl: c.imageUrl, status: c.status, rejectReason: c.rejectReason,
-      instructor: { userId: c.instructorId, fullName: inst?.fullName || 'Instructor' }, language: c.language || 'English', durationHours: c.durationHours ?? Math.max(1, Math.ceil(ls.reduce((t, l) => t + l.minutes, 0) / 60)), details: c.details || {}, ...rating(c.courseId),
-      enrolledCount: db.enrollments.filter(e => e.courseId === c.courseId).length, lessonCount: ls.length,
-      sections: c.sections.map(s => ({
-        sectionId: s.sectionId, title: s.title, position: s.position, lessons: s.lessons.map(l => ({ lessonId: l.lessonId, title: l.title, type: l.type, minutes: l.minutes, preview: l.preview, position: l.position })),
-        quiz: s.quiz ? { quizId: s.quiz.quizId, title: s.quiz.title, passScore: s.quiz.passScore, maxAttempts: s.quiz.maxAttempts, questionCount: s.quiz.questions.length } : null
-      }))
-    };
-  };
-  const progress = c => {
-    const en = enrolledIn(c.courseId), ls = lessonsOf(c), dn = en ? db.progress.filter(p => p.courseId === c.courseId && p.userId === uid && ls.some(l => l.lessonId === p.lessonId)).map(p => p.lessonId) : [], next = ls.find(l => !dn.includes(l.lessonId));
-    // quiz status per quiz in this course; a course is 100% only when every lesson is done AND every quiz is passed
-    const quizzes = {}; c.sections.forEach(s => { if (!s.quiz) return; const at = en ? db.attempts.filter(a => a.quizId === s.quiz.quizId && a.userId === uid) : []; quizzes[s.quiz.quizId] = { passed: at.some(a => a.passed), best: at.length ? Math.max(...at.map(a => a.score)) : null, attempts: at.length }; });
-    const totalQuizzes = Object.keys(quizzes).length, passedQuizzes = Object.values(quizzes).filter(x => x.passed).length, items = ls.length + totalQuizzes;
-    return { enrolled: en, completed: dn, quizzes, totalQuizzes, passedQuizzes, percent: items ? Math.round((dn.length + passedQuizzes) / items * 100) : 0, nextLessonId: (next || ls[0])?.lessonId ?? null };
-  };
-  const courseBody = b => {
-    need(b.title && String(b.title).trim(), 'Title is required'); need(b.price !== '' && +b.price >= 0, 'Price must be 0 or more'); need(db.categories.some(k => k.categoryId === +b.categoryId), 'Choose a category'); need(['Beginner', 'Intermediate', 'Advanced'].includes(b.level), 'Invalid level');
-    return { title: b.title.trim(), description: b.description || '', categoryId: +b.categoryId, level: b.level, price: +b.price, imageUrl: b.imageUrl || null, details: b.details || {} };
-  };
-  const lessonBody = b => {
-    need(b.title && b.title.trim(), 'Lesson title is required'); need(['VIDEO', 'TEXT', 'FILE'].includes(b.type), 'Invalid lesson type'); need(b.type === 'TEXT' || /^https?:\/\//i.test(b.contentUrl || ''), 'Enter a valid http(s) link for video or file lessons'); need(+b.minutes >= 0, 'Minutes must be 0 or more');
-    return { title: b.title.trim(), type: b.type, contentUrl: b.contentUrl || null, text: b.text || '', minutes: +b.minutes || 0, preview: !!b.preview };
-  };
-  const reviewOk = b => need(Number.isInteger(+b.rating) && +b.rating >= 1 && +b.rating <= 5, 'Rating must be 1 to 5');
-
-  // Email verification codes (real server: emailed, stored hashed, 6 digits, 10 min, 5 tries, 60 s between sends). Mock has no mailbox, so it returns demoCode.
-  const issueCode = em => {
-    const e = em.trim().toLowerCase(), old = (db.verifs || []).find(v => v.email === e);
-    if (old && Date.now() - old.sentAt < 60000) err(429, 'Please wait ' + Math.ceil((60000 - (Date.now() - old.sentAt)) / 1000) + ' seconds before requesting a new code');
-    const code = String(Math.floor(100000 + Math.random() * 900000)); db.verifs = (db.verifs || []).filter(v => v.email !== e && v.expires > Date.now());
-    db.verifs.push({ email: e, code, expires: Date.now() + 10 * 60000, tries: 0, sentAt: Date.now() }); return code;
-  };
-
-  const out = (() => {
-    /* ---- public ---- */
-    if (R('POST', /^\/auth\/register$/)) {
-      const { fullName, email, password } = body || {};
-      { const bad = validateSignup({ fullName, email, password }), first = Object.keys(bad)[0]; if (first) err(400, bad[first]); }
-      const ex = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (ex && ex.verified !== false) err(409, 'Email already registered');
-      let nu = ex; // an unverified sign-up for this email (typo, lost code) is simply redone
-      if (nu) { nu.fullName = fullName.trim(); nu.password = password; }
-      else { nu = { userId: Date.now(), fullName: fullName.trim(), email, password, role: 'STUDENT', locked: false, verified: false }; db.users.push(nu); log('ACCOUNT', 'REGISTERED', { user: nu, actor: nu.fullName, detail: 'Email sign-up (awaiting email verification)' }); }
-      return { verificationRequired: true, message: 'We sent a 6-digit code to ' + email + '.', demoCode: issueCode(nu.email) };
-    }
-    if (R('POST', /^\/auth\/verify-email$/)) {
-      const { email = '', code = '' } = body || {}, e = email.trim().toLowerCase(), bad = 'Verification code is invalid or expired';
-      const v = (db.verifs || []).find(x => x.email === e), u = db.users.find(x => x.email.toLowerCase() === e && x.verified === false);
-      if (!v || !u || v.expires < Date.now()) err(400, bad);
-      if (v.code !== String(code).trim()) { if (++v.tries >= 5) db.verifs = db.verifs.filter(x => x !== v); localStorage.setItem('db6', JSON.stringify(db)); err(400, bad); }
-      u.verified = true; db.verifs = db.verifs.filter(x => x !== v); return null;
-    }
-    if (R('POST', /^\/auth\/resend-code$/)) {
-      const e = (body?.email || '').trim().toLowerCase(), u = db.users.find(x => x.email.toLowerCase() === e && x.verified === false);
-      const msg = 'If that email is waiting for verification, a new code has been sent.'; if (!u) return { message: msg };
-      return { message: msg, demoCode: issueCode(e) };
-    }
-    if (R('POST', /^\/auth\/login$/)) {
-      const u = db.users.find(u => u.email.toLowerCase() === (body.email || '').toLowerCase() && u.password && u.password === body.password);
-      const save = () => localStorage.setItem('db6', JSON.stringify(db)); // failed attempts are logged too, so save before throwing
-      if (!u) { log('ACCOUNT', 'LOGIN_FAILED', { email: body.email || '', actor: '', detail: 'Wrong email or password' }); save(); err(401, 'Invalid email or password'); }
-      if (u.locked) { log('ACCOUNT', 'LOGIN_BLOCKED', { user: u, actor: u.fullName, detail: 'Account is locked' }); save(); err(403, 'This account has been locked. Contact an admin.'); }
-      if (u.verified === false) err(403, 'Please verify your email first');
-      log('ACCOUNT', 'LOGIN', { user: u, actor: u.fullName, detail: 'Email and password' });
-      return { token: 'mock-' + u.userId, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
-    }
-    if (R('POST', /^\/auth\/forgot-password$/)) { // real server: email a 6-digit code/link and return only {message}. Mock has no mailbox, so it also returns demoCode
-      const email = (body?.email || '').trim().toLowerCase(); need(/^\S+@\S+\.\S+$/.test(email), 'Enter a valid email');
-      const u = db.users.find(x => x.email.toLowerCase() === email && !x.locked); db.resets = (db.resets || []).filter(r => r.email !== email && r.expires > Date.now());
-      const msg = 'If that email is registered, a reset code has been sent.'; if (!u) return { message: msg };
-      const code = String(Math.floor(100000 + Math.random() * 900000)); db.resets.push({ email, code, expires: Date.now() + 10 * 60000, tries: 0 });
-      log('ACCOUNT', 'RESET_REQUESTED', { user: u, actor: u.fullName, detail: 'Forgot password' }); return { message: msg, demoCode: code };
-    }
-    if (R('POST', /^\/auth\/reset-password$/)) {
-      const { email = '', code = '', newPassword = '' } = body || {}, e = email.trim().toLowerCase(); need(newPassword.length >= 6, 'Password must be at least 6 characters');
-      const r = (db.resets || []).find(x => x.email === e), u = db.users.find(x => x.email.toLowerCase() === e);
-      if (!r || !u || r.expires < Date.now()) err(400, 'Reset code is invalid or expired');
-      if (r.code !== String(code).trim()) { if (++r.tries >= 5) db.resets = db.resets.filter(x => x !== r); localStorage.setItem('db6', JSON.stringify(db)); err(400, 'Reset code is invalid or expired'); }
-      u.password = newPassword; db.resets = db.resets.filter(x => x !== r); log('ACCOUNT', 'PASSWORD_RESET', { user: u, actor: u.fullName, detail: 'Forgot password' }); return null;
-    }
-    if (R('POST', /^\/auth\/google$/)) {
-      let g; try { g = decodeJwt(body.credential); } catch { err(401, 'Invalid Google sign-in token'); }
-      need(g.email && g.email_verified !== false, 'Your Google email address is not verified');
-      if (CONFIG.GOOGLE_CLIENT_ID && g.aud !== CONFIG.GOOGLE_CLIENT_ID) err(401, 'This Google token was issued for a different app');
-      if (g.exp && g.exp * 1000 < Date.now()) err(401, 'Google sign-in expired. Please try again.');
-      let u = db.users.find(x => x.email.toLowerCase() === g.email.toLowerCase()), created = false;
-      if (u && u.locked) err(403, 'This account has been locked. Contact an admin.');
-      if (u && u.googleLinked === false) err(403, 'Google sign-in is unbound from this account. Log in with your email and password.');
-      if (!u) { u = { userId: Date.now(), fullName: (g.name || g.email.split('@')[0]).trim(), email: g.email, password: null, role: 'STUDENT', locked: false, provider: 'GOOGLE', avatar: g.picture || '' }; db.users.push(u); created = true; }
-      u.googleLinked = true; u.verified = true; if (!u.avatar && g.picture) u.avatar = g.picture; // same email = same account; the picture is saved on the account so every login method shows it
-      log('ACCOUNT', created ? 'REGISTERED' : 'LOGIN', { user: u, actor: u.fullName, detail: 'Google sign-in' });
-      return { token: 'mock-' + u.userId, created, user: { userId: u.userId, fullName: u.fullName, email: u.email, role: u.role, avatar: u.avatar || '' } };
-    }
-    if (R('GET', /^\/categories$/)) return db.categories;
-    if (R('GET', /^\/courses$/)) return db.courses.filter(c => c.status === 'PUBLISHED').map(view);
-    if (R('GET', /^\/courses\/(\d+)$/)) { const c = course(m[1]); if (c.status !== 'PUBLISHED' && !(me && (admin || own(c)))) err(404, 'Course not found'); return view(c); }
-    if (R('GET', /^\/courses\/(\d+)\/reviews$/)) return db.reviews.filter(r => r.courseId === +m[1]).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map(r => ({ reviewId: r.reviewId, userId: r.userId, userName: db.users.find(u => u.userId === r.userId)?.fullName || r.userName, rating: r.rating, comment: r.comment, createdAt: r.createdAt }));
-    if (R('GET', /^\/roles$/)) return { you: me?.role || 'GUEST', roles: {
-      GUEST: ['Browse the home page, about, contact and course catalog', 'View course details, reviews and free preview lessons', 'Send a support ticket', 'Sign up, log in (email or Google) and reset a forgotten password'],
-      STUDENT: ['Everything a guest can do', 'Enroll in courses, track progress and take quizzes', 'Add courses to the cart and check out', 'Write, edit and delete own reviews', 'Edit profile, change password, link or unbind Google', 'See own notifications, enrollments and support tickets', 'Open full (non-preview) lessons of enrolled courses'],
-      ADMIN: ['Everything a student can do (enrolls without payment, no cart)', 'Create, edit, delete, approve or reject courses', 'Manage sections, lessons and quizzes', 'Manage categories', 'View users, change roles, lock or unlock accounts', 'Handle support tickets, moderate reviews, view logs and stats'] } };
-    if (R('GET', /^\/courses\/(\d+)\/progress$/)) return progress(course(m[1]));
-    if (R('GET', /^\/lessons\/(\d+)$/)) {
-      const { c, l } = findLesson(m[1]);
-      if (c.status !== 'PUBLISHED' && !(me && (admin || own(c)))) err(404, 'Lesson not found');
-      if (!l.preview) { if (!me) err(401, 'Please log in first'); if (!(admin || own(c) || enrolledIn(c.courseId))) err(403, 'Enroll in this course to view this lesson'); }
-      return { ...l, courseId: c.courseId };
-    }
-
-    if (R('POST', /^\/support$/)) { // public: guests can write too
-      const b = body || {}, name = me ? me.fullName : (b.name || '').trim(), email = me ? me.email : (b.email || '').trim();
-      need(name, 'Name is required'); need(/^\S+@\S+\.\S+$/.test(email), 'Enter a valid email'); need(['PAYMENT', 'COURSE', 'ACCOUNT', 'OTHER'].includes(b.category), 'Choose a topic');
-      need((b.subject || '').trim().length >= 3, 'Subject is required'); need((b.message || '').trim().length >= 10, 'Message must be at least 10 characters');
-      const c = b.courseId ? db.courses.find(x => x.courseId === +b.courseId) : null;
-      const t = { ticketId: ++db.tid, userId: me?.userId ?? null, name, email, category: b.category, courseId: c?.courseId ?? null, courseTitle: c?.title ?? '', subject: b.subject.trim().slice(0, 100), message: b.message.trim().slice(0, 1000), status: 'OPEN', reply: null, repliedAt: null, createdAt: now() };
-      db.tickets.push(t); db.users.filter(u => u.role === 'ADMIN').forEach(u => notify(u.userId, 'New support ticket: "' + t.subject + '"', 'admin.html')); return { ticketId: t.ticketId };
-    }
-
-    /* ---- any logged-in user ---- */
-    if (!me) err(401, 'Please log in first'); if (me.locked) err(403, 'This account has been locked');
-    if (R('GET', /^\/users\/me$/)) return pubUser(me);
-    if (R('PUT', /^\/users\/me$/)) { need(body.fullName && body.fullName.trim(), 'Full name is required'); me.fullName = body.fullName.trim(); if (typeof body.avatar === 'string') me.avatar = body.avatar; return pubUser(me); }
-    if (R('POST', /^\/users\/me\/google\/unbind$/)) {
-      if (!pubUser(me).googleLinked) err(400, 'No Google account is linked');
-      if (!me.password) { if (body?.newPassword) { need(body.newPassword.length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; } else need(body?.force === true, 'Set a password (min 6 characters) before unbinding Google'); }
-      me.googleLinked = false; if (/^https?:/i.test(me.avatar || '')) me.avatar = ''; return null;
-    }
-    if (R('PUT', /^\/users\/me\/password$/)) { if (me.password && me.password !== body.currentPassword) err(400, 'Current password is incorrect'); need((body.newPassword || '').length >= 6, 'Password must be at least 6 characters'); me.password = body.newPassword; log('ACCOUNT', 'PASSWORD_CHANGED', { user: me, detail: 'Changed by the user' }); return null; }
-    if (R('GET', /^\/support\/me$/)) return db.tickets.filter(t => t.userId === uid).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ticketId - a.ticketId);
-    if (R('GET', /^\/notifications\/me$/)) return db.notifications.filter(n => n.userId === uid).sort((a, b) => b.notificationId - a.notificationId).slice(0, 20);
-    if (R('POST', /^\/notifications\/read$/)) { db.notifications.forEach(n => { if (n.userId === uid) n.read = true; }); return null; }
-    if (R('GET', /^\/enrollments\/me$/)) return db.enrollments.filter(e => e.userId === uid).map(e => {
-      const c = course(e.courseId), p = progress(c), v = view(c);
-      return { enrollmentId: e.enrollmentId, courseId: c.courseId, title: c.title, imageUrl: c.imageUrl, category: v.category, instructor: v.instructor.fullName, studentName: me.fullName, totalLessons: v.lessonCount, completedLessons: p.completed.length, totalQuizzes: p.totalQuizzes, passedQuizzes: p.passedQuizzes, percent: p.percent, nextLessonId: p.nextLessonId, enrolledAt: e.enrolledAt };
-    });
-    if (R('POST', /^\/courses\/(\d+)\/enroll$/)) {
-      const c = course(m[1]); if (c.status !== 'PUBLISHED') err(404, 'Course not found'); if (own(c)) err(400, 'You cannot enroll in your own course');
-      if (enrolledIn(c.courseId)) err(409, 'You are already enrolled in this course');
-      if (!admin && c.price > 0 && !['CARD', 'EWALLET', 'BANK', 'DEMO'].includes(body?.paymentMethod)) err(400, 'Choose a payment method');
-      const en = { enrollmentId: ++db.eid, courseId: c.courseId, userId: uid, pricePaid: admin ? 0 : c.price, paymentMethod: admin ? 'ADMIN' : c.price ? body.paymentMethod : null, enrolledAt: now() };
-      db.enrollments.push(en); log('ENROLLMENT', 'ENROLLED', { user: me, course: c });
-      if (en.pricePaid > 0) log('PAYMENT', 'PAID', { user: me, course: c, amount: en.pricePaid, method: en.paymentMethod });
-      notify(c.instructorId, me.fullName + ' enrolled in "' + c.title + '"', 'course.html?id=' + c.courseId); return { enrollmentId: en.enrollmentId, courseId: c.courseId, title: c.title };
-    }
-    if (R('DELETE', /^\/courses\/(\d+)\/enroll$/)) {
-      const id = +m[1]; if (!enrolledIn(id)) err(404, 'You are not enrolled in this course');
-      log('ENROLLMENT', 'UNENROLLED', { user: me, course: db.courses.find(x => x.courseId === id) });
-      db.enrollments = db.enrollments.filter(e => !(e.courseId === id && e.userId === uid)); db.progress = db.progress.filter(p => !(p.courseId === id && p.userId === uid)); return null;
-    }
-    if (R('PUT', /^\/courses\/(\d+)\/progress$/)) {
-      const c = course(m[1]); if (!enrolledIn(c.courseId)) err(403, 'Enroll in this course first');
-      const l = lessonsOf(c).find(l => l.lessonId === +body.lessonId) || err(404, 'Lesson not found'), was = progress(c).percent;
-      db.progress = db.progress.filter(p => !(p.userId === uid && p.lessonId === l.lessonId)); if (body.done !== false) db.progress.push({ userId: uid, courseId: c.courseId, lessonId: l.lessonId });
-      const p = progress(c); if (p.percent === 100 && was < 100) log('COMPLETION', 'COMPLETED', { user: me, course: c, detail: p.completed.length + ' lessons, ' + p.passedQuizzes + '/' + p.totalQuizzes + ' quizzes' });
-      if (p.percent === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId); return p;
-    }
-    if (R('GET', /^\/quizzes\/(\d+)$/)) {
-      const { c, q } = findQuiz(m[1]); if (!(admin || own(c) || enrolledIn(c.courseId))) err(403, 'Enroll in this course to take the quiz');
-      const at = db.attempts.filter(a => a.quizId === q.quizId && a.userId === uid);
-      return {
-        quizId: q.quizId, courseId: c.courseId, title: q.title, passScore: q.passScore, maxAttempts: q.maxAttempts, attemptsUsed: at.length, bestScore: at.length ? Math.max(...at.map(a => a.score)) : null, passed: at.some(a => a.passed),
-        questions: q.questions.map(x => ({ questionId: x.questionId, text: x.text, options: x.options.map(o => ({ optionId: o.optionId, text: o.text })) }))
-      };
-    }
-    if (R('POST', /^\/quizzes\/(\d+)\/attempts$/)) {
-      const { c, q } = findQuiz(m[1]); if (!(admin || own(c) || enrolledIn(c.courseId))) err(403, 'Enroll in this course to take the quiz'); // same rule as opening the quiz (admins can test any quiz)
-      const used = db.attempts.filter(a => a.quizId === q.quizId && a.userId === uid).length; if (!admin && q.maxAttempts > 0 && used >= q.maxAttempts) err(409, 'You have used all attempts for this quiz');
-      const ans = body.answers || {}; need(q.questions.every(x => ans[x.questionId] != null), 'Answer every question before submitting');
-      const correct = {}; let ok = 0; q.questions.forEach(x => { const co = x.options.find(o => o.correct); correct[x.questionId] = co.optionId; if (+ans[x.questionId] === co.optionId) ok++; });
-      const was = progress(c).percent, score = Math.round(ok / q.questions.length * 100), passed = score >= q.passScore; db.attempts.push({ attemptId: ++db.aid, quizId: q.quizId, userId: uid, score, passed, createdAt: now() });
-      const ap = progress(c), after = ap.percent; if (after === 100 && was < 100) log('COMPLETION', 'COMPLETED', { user: me, course: c, detail: ap.completed.length + ' lessons, ' + ap.passedQuizzes + '/' + ap.totalQuizzes + ' quizzes' });
-      if (after === 100 && was < 100) notify(uid, 'Congratulations! You completed "' + c.title + '".', 'congrats.html?id=' + c.courseId);
-      return { score, passed, passScore: q.passScore, correctCount: ok, total: q.questions.length, correct, attemptsUsed: used + 1, courseCompleted: after === 100 };
-    }
-    if (R('POST', /^\/courses\/(\d+)\/reviews$/)) {
-      const c = course(m[1]); if (!enrolledIn(c.courseId)) err(403, 'Only enrolled students can review this course');
-      if (db.reviews.some(r => r.courseId === c.courseId && r.userId === uid)) err(409, 'You have already reviewed this course'); reviewOk(body);
-      const r = { reviewId: ++db.rid, courseId: c.courseId, userId: uid, rating: +body.rating, comment: (body.comment || '').trim(), createdAt: now() }; db.reviews.push(r); return r;
-    }
-    if (R('PUT', /^\/reviews\/(\d+)$/)) { const r = db.reviews.find(x => x.reviewId === +m[1]) || err(404, 'Review not found'); if (r.userId !== uid) err(403, 'You can only edit your own review'); reviewOk(body); r.rating = +body.rating; r.comment = (body.comment || '').trim(); return r; }
-    if (R('DELETE', /^\/reviews\/(\d+)$/)) { const r = db.reviews.find(x => x.reviewId === +m[1]) || err(404, 'Review not found'); if (r.userId !== uid && !admin) err(403, 'You can only delete your own review'); db.reviews = db.reviews.filter(x => x !== r); return null; }
-
-    /* ---- shopping cart (any logged-in user except ADMIN, who enrolls without payment) ---- */
-    const cartRows = () => db.cart.filter(x => x.userId === uid && db.courses.some(c => c.courseId === x.courseId)).map(x => ({ ...view(db.courses.find(c => c.courseId === x.courseId)), addedAt: x.addedAt }));
-    const cartTotal = rows => rows.reduce((t, c) => t + c.price, 0);
-    if (R('GET', /^\/cart$/)) { const rows = cartRows(); return { items: rows, count: rows.length, total: cartTotal(rows) }; }
-    if (R('POST', /^\/cart\/(\d+)$/)) {
-      if (admin) err(400, 'Admins enroll without payment, so they do not use the cart');
-      const c = course(m[1]); if (c.status !== 'PUBLISHED') err(404, 'Course not found'); if (own(c)) err(400, 'You cannot buy your own course');
-      if (enrolledIn(c.courseId)) err(409, 'You are already enrolled in this course');
-      if (db.cart.some(x => x.userId === uid && x.courseId === c.courseId)) err(409, 'This course is already in your cart');
-      db.cart.push({ userId: uid, courseId: c.courseId, addedAt: now() }); return { courseId: c.courseId, count: cartRows().length };
-    }
-    if (R('DELETE', /^\/cart\/(\d+)$/)) {
-      if (!db.cart.some(x => x.userId === uid && x.courseId === +m[1])) err(404, 'That course is not in your cart');
-      db.cart = db.cart.filter(x => !(x.userId === uid && x.courseId === +m[1])); return null;
-    }
-    if (R('DELETE', /^\/cart$/)) { db.cart = db.cart.filter(x => x.userId !== uid); return null; }
-    if (R('POST', /^\/cart\/checkout$/)) { // enrolls in every course in the cart; same records, logs and notifications as POST /courses/{id}/enroll
-      if (admin) err(400, 'Admins enroll without payment, so they do not use the cart');
-      const rows = cartRows(); need(rows.length, 'Your cart is empty');
-      if (rows.some(c => c.price > 0) && !['CARD', 'EWALLET', 'BANK', 'DEMO'].includes(body?.paymentMethod)) err(400, 'Choose a payment method');
-      const done = [], skipped = [];
-      rows.forEach(v => {
-        const c = db.courses.find(x => x.courseId === v.courseId);
-        if (c.status !== 'PUBLISHED' || own(c) || enrolledIn(c.courseId)) { skipped.push({ courseId: c.courseId, title: c.title }); return; }
-        const en = { enrollmentId: ++db.eid, courseId: c.courseId, userId: uid, pricePaid: c.price, paymentMethod: c.price ? body.paymentMethod : null, enrolledAt: now() };
-        db.enrollments.push(en); log('ENROLLMENT', 'ENROLLED', { user: me, course: c });
-        if (en.pricePaid > 0) log('PAYMENT', 'PAID', { user: me, course: c, amount: en.pricePaid, method: en.paymentMethod, detail: 'Cart checkout' });
-        notify(c.instructorId, me.fullName + ' enrolled in "' + c.title + '"', 'course.html?id=' + c.courseId);
-        done.push({ enrollmentId: en.enrollmentId, courseId: c.courseId, title: c.title, price: c.price });
-      });
-      db.cart = db.cart.filter(x => x.userId !== uid);
-      return { orderNumber: done.length ? 'LH-' + String(done[done.length - 1].enrollmentId).padStart(6, '0') : null, paymentMethod: body?.paymentMethod || null, items: done, skipped, total: done.reduce((t, x) => t + x.price, 0) };
-    }
-
-    /* ---- course management (admin only) ---- */
-    if (R('GET', /^\/instructor\/courses$/)) { if (!admin) err(403, 'Admin only'); return db.courses.map(view); }
-    if (R('GET', /^\/instructor\/courses\/(\d+)$/)) { const c = manage(course(m[1])); return { ...view(c), sections: c.sections }; }
-    if (R('PUT', /^\/courses\/(\d+)$/)) { const c = manage(course(m[1])); Object.assign(c, courseBody(body)); return view(c); }
-    if (R('DELETE', /^\/courses\/(\d+)$/)) {
-      const c = manage(course(m[1])); if (db.enrollments.some(e => e.courseId === c.courseId)) err(409, 'Cannot delete a course that has enrolled students');
-      db.courses = db.courses.filter(x => x !== c); db.reviews = db.reviews.filter(r => r.courseId !== c.courseId); return null;
-    }
-    if (R('POST', /^\/courses\/(\d+)\/submit$/)) {
-      const c = manage(course(m[1])); if (!own(c)) err(403, 'Only the course owner can submit it'); need(['DRAFT', 'REJECTED'].includes(c.status), 'Only draft or rejected courses can be submitted');
-      need(c.sections.some(s => s.lessons.length > 0), 'Add at least one section and one lesson before submitting'); c.status = 'PENDING'; c.rejectReason = null;
-      db.users.filter(u => u.role === 'ADMIN').forEach(u => notify(u.userId, '"' + c.title + '" is waiting for approval', 'courses.html')); return view(c);
-    }
-    if (R('GET', /^\/courses\/(\d+)\/students$/)) {
-      const c = manage(course(m[1])), total = lessonsOf(c).length;
-      return db.enrollments.filter(e => e.courseId === c.courseId && db.users.some(u => u.userId === e.userId)).map(e => {
-        const u = db.users.find(x => x.userId === e.userId), dn = db.progress.filter(p => p.courseId === c.courseId && p.userId === e.userId).length;
-        return { userId: u.userId, fullName: u.fullName, email: u.email, enrolledAt: e.enrolledAt, completedLessons: dn, totalLessons: total, percent: total ? Math.round(dn / total * 100) : 0 };
-      });
-    }
-    if (R('POST', /^\/courses\/(\d+)\/sections$/)) { const c = manage(course(m[1])); need(body.title && body.title.trim(), 'Section title is required'); const s = { sectionId: ++db.sid, title: body.title.trim(), position: c.sections.length + 1, lessons: [], quiz: null }; c.sections.push(s); return s; }
-    if (R('PUT', /^\/sections\/(\d+)$/)) { const { c, s } = findSection(m[1]); manage(c); need(body.title && body.title.trim(), 'Section title is required'); s.title = body.title.trim(); return s; }
-    if (R('DELETE', /^\/sections\/(\d+)$/)) { const { c, s } = findSection(m[1]); manage(c); c.sections = c.sections.filter(x => x !== s); renum(c.sections); return null; }
-    if (R('POST', /^\/sections\/(\d+)\/move$/)) { const { c, s } = findSection(m[1]); manage(c); move(c.sections, s, +body.direction); return null; }
-    if (R('POST', /^\/sections\/(\d+)\/lessons$/)) { const { c, s } = findSection(m[1]); manage(c); const l = { lessonId: ++db.lid, position: s.lessons.length + 1, ...lessonBody(body) }; s.lessons.push(l); return l; }
-    if (R('PUT', /^\/lessons\/(\d+)$/)) { const { c, l } = findLesson(m[1]); manage(c); Object.assign(l, lessonBody(body)); return l; }
-    if (R('DELETE', /^\/lessons\/(\d+)$/)) { const { c, s, l } = findLesson(m[1]); manage(c); s.lessons = s.lessons.filter(x => x !== l); renum(s.lessons); db.progress = db.progress.filter(p => p.lessonId !== l.lessonId); return null; }
-    if (R('POST', /^\/lessons\/(\d+)\/move$/)) { const { c, s, l } = findLesson(m[1]); manage(c); move(s.lessons, l, +body.direction); return null; }
-    if (R('PUT', /^\/sections\/(\d+)\/quiz$/)) {
-      const { c, s } = findSection(m[1]); manage(c); need(body.title && body.title.trim(), 'Quiz title is required'); const pass = +body.passScore; need(pass >= 1 && pass <= 100, 'Pass score must be 1 to 100');
-      need(Array.isArray(body.questions) && body.questions.length, 'Add at least one question');
-      body.questions.forEach((x, i) => { need(x.text && x.text.trim(), 'Question ' + (i + 1) + ' needs text'); const os = (x.options || []).filter(o => o.text && o.text.trim()); need(os.length >= 2, 'Question ' + (i + 1) + ' needs at least 2 options'); need(os.filter(o => o.correct).length === 1, 'Question ' + (i + 1) + ' needs exactly one correct option'); });
-      s.quiz = {
-        quizId: s.quiz?.quizId || ++db.zid, title: body.title.trim(), passScore: pass, maxAttempts: Math.max(0, +body.maxAttempts || 0),
-        questions: body.questions.map(x => ({ questionId: ++db.qid, text: x.text.trim(), options: x.options.filter(o => o.text && o.text.trim()).map(o => ({ optionId: ++db.oid, text: o.text.trim(), correct: !!o.correct })) }))
-      }; return null;
-    }
-    if (R('DELETE', /^\/sections\/(\d+)\/quiz$/)) { const { c, s } = findSection(m[1]); manage(c); s.quiz = null; return null; }
-
-    /* ---- admin only ---- */
-    if (!admin) err(403, 'Admin only');
-    if (R('GET', /^\/admin\/courses$/)) return db.courses.map(view);
-    const adminCourse = b => { // fields only an admin can set: status + owner
-      const status = b.status || 'DRAFT', ins = db.users.find(u => u.userId === +b.instructorId);
-      need(['DRAFT', 'PENDING', 'PUBLISHED', 'REJECTED'].includes(status), 'Invalid status'); need(ins && (ins.role === 'ADMIN' || ins.author), 'Choose an instructor');
-      need(status !== 'REJECTED' || (b.rejectReason && b.rejectReason.trim()), 'A reject reason is required');
-      return { status, instructorId: ins.userId, rejectReason: status === 'REJECTED' ? b.rejectReason.trim() : null };
-    };
-    if (R('POST', /^\/admin\/courses$/)) { const a = adminCourse(body), c = { courseId: Date.now(), ...courseBody(body), ...a, language: 'English', sections: [] }; db.courses.push(c); return view(c); }
-    if (R('PUT', /^\/admin\/courses\/(\d+)$/)) { const c = course(m[1]), cb = courseBody(body); if (body.details === undefined) delete cb.details; Object.assign(c, cb, adminCourse(body)); return view(c); }
-    if (R('DELETE', /^\/admin\/courses\/(\d+)$/)) { // admin delete also removes enrollments, progress, reviews and quiz attempts
-      const c = course(m[1]), quizIds = c.sections.filter(s => s.quiz).map(s => s.quiz.quizId);
-      db.courses = db.courses.filter(x => x !== c); db.enrollments = db.enrollments.filter(e => e.courseId !== c.courseId); db.progress = db.progress.filter(p => p.courseId !== c.courseId);
-      db.reviews = db.reviews.filter(r => r.courseId !== c.courseId); db.attempts = db.attempts.filter(a => !quizIds.includes(a.quizId)); return null;
-    }
-    if (R('GET', /^\/admin\/tickets$/)) return [...db.tickets].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.ticketId - a.ticketId);
-    if (R('PUT', /^\/admin\/tickets\/(\d+)$/)) {
-      const t = db.tickets.find(x => x.ticketId === +m[1]) || err(404, 'Ticket not found'), status = body.status || t.status, reply = (body.reply || '').trim();
-      need(['OPEN', 'RESOLVED'].includes(status), 'Invalid status');
-      if (reply) { t.reply = reply.slice(0, 1000); t.repliedAt = now(); if (t.userId) notify(t.userId, 'Support replied to "' + t.subject + '"', 'support.html#support'); }
-      t.status = status; return t;
-    }
-    if (R('GET', /^\/admin\/logs\/(account|payment|enrollment|completion)$/)) return db.logs.filter(l => l.type === m[1].toUpperCase()).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.logId - a.logId).slice(0, 500);
-    if (R('POST', /^\/admin\/courses\/(\d+)\/approve$/)) { const c = course(m[1]); need(c.status === 'PENDING', 'Only pending courses can be approved'); c.status = 'PUBLISHED'; c.rejectReason = null; notify(c.instructorId, 'Your course "' + c.title + '" was approved and is now published.', 'course.html?id=' + c.courseId); return view(c); }
-    if (R('POST', /^\/admin\/courses\/(\d+)\/reject$/)) {
-      const c = course(m[1]); need(c.status === 'PENDING', 'Only pending courses can be rejected'); need(body.reason && body.reason.trim(), 'A reason is required'); c.status = 'REJECTED'; c.rejectReason = body.reason.trim();
-      notify(c.instructorId, 'Your course "' + c.title + '" was rejected: ' + c.rejectReason, 'course.html?id=' + c.courseId); return view(c);
-    }
-    if (R('POST', /^\/categories$/)) { need(body.name && body.name.trim(), 'Category name is required'); if (db.categories.some(k => k.name.toLowerCase() === body.name.trim().toLowerCase())) err(409, 'Category already exists'); const k = { categoryId: Date.now(), name: body.name.trim() }; db.categories.push(k); return k; }
-    if (R('PUT', /^\/categories\/(\d+)$/)) {
-      const k = db.categories.find(x => x.categoryId === +m[1]) || err(404, 'Category not found'); need(body.name && body.name.trim(), 'Category name is required');
-      if (db.categories.some(x => x !== k && x.name.toLowerCase() === body.name.trim().toLowerCase())) err(409, 'Category already exists'); k.name = body.name.trim(); return k;
-    }
-    if (R('DELETE', /^\/categories\/(\d+)$/)) { const k = db.categories.find(x => x.categoryId === +m[1]) || err(404, 'Category not found'); if (db.courses.some(c => c.categoryId === k.categoryId)) err(409, 'Cannot delete a category that has courses'); db.categories = db.categories.filter(x => x !== k); return null; }
-    if (R('GET', /^\/admin\/users$/)) return db.users.map(u => ({ ...pubUser(u), enrollments: db.enrollments.filter(e => e.userId === u.userId).length, courses: db.courses.filter(c => c.instructorId === u.userId).length }));
-    if (R('PUT', /^\/admin\/users\/(\d+)\/role$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot change your own role'); need(['STUDENT', 'ADMIN'].includes(body.role), 'Invalid role'); log('ACCOUNT', 'ROLE_CHANGED', { user: u, detail: u.role + ' -> ' + body.role }); u.role = body.role; return null; }
-    if (R('PUT', /^\/admin\/users\/(\d+)\/lock$/)) { const u = db.users.find(x => x.userId === +m[1]) || err(404, 'User not found'); if (u.userId === uid) err(400, 'You cannot lock your own account'); u.locked = !!body.locked; log('ACCOUNT', u.locked ? 'LOCKED' : 'UNLOCKED', { user: u }); return null; }
-    if (R('GET', /^\/admin\/reviews$/)) return [...db.reviews].sort((a, b) => b.reviewId - a.reviewId).slice(0, 50).map(r => ({ reviewId: r.reviewId, courseTitle: db.courses.find(c => c.courseId === r.courseId)?.title, userName: db.users.find(u => u.userId === r.userId)?.fullName || r.userName, rating: r.rating, comment: r.comment, createdAt: r.createdAt }));
-    if (R('GET', /^\/admin\/stats$/)) {
-      const pub = db.courses.filter(c => c.status === 'PUBLISHED');
-      return {
-        users: db.users.length, courses: db.courses.length, published: pub.length, pending: db.courses.filter(c => c.status === 'PENDING').length, enrollments: db.enrollments.length, reviews: db.reviews.length, openTickets: db.tickets.filter(t => t.status === 'OPEN').length,
-        topCourses: pub.map(c => ({ courseId: c.courseId, title: c.title, enrolled: db.enrollments.filter(e => e.courseId === c.courseId).length })).sort((a, b) => b.enrolled - a.enrolled).slice(0, 5)
-      };
-    }
-    err(404, 'Not found');
-  })();
-  if (method !== 'GET') localStorage.setItem('db6', JSON.stringify(db));
-  return out;
+/* ===== personal courses: private / public switch. Public needs an admin's approval; a rejection arrives as a notification with the reason ===== */
+const VIS = { DRAFT: ['secondary', 'lock-fill', 'Private'], PENDING: ['warning text-dark', 'hourglass-split', 'Waiting for admin'], REJECTED: ['danger', 'x-octagon-fill', 'Not approved'], PUBLISHED: ['success', 'globe2', 'Public'] };
+const visBadge = s => { const v = VIS[s] || VIS.DRAFT; return `<span class="badge bg-${v[0]}"><i class="bi bi-${v[1]}"></i> ${v[2]}</span>`; };
+const visToggle = c => `<div class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" role="switch" id="vis${c.courseId}" data-vis="${c.courseId}" data-title="${esc(c.title)}" data-status="${c.status}" ${c.status === 'PENDING' || c.status === 'PUBLISHED' ? 'checked' : ''}>
+  <label class="form-check-label small" for="vis${c.courseId}">${c.status === 'PUBLISHED' ? 'Public' : c.status === 'PENDING' ? 'Public (waiting for approval)' : 'Make public'}</label></div>`;
+const visNote = c => c.status === 'REJECTED' ? `<div class="alert alert-danger py-2 small mb-0 mt-2"><b>Not approved:</b> ${esc(c.rejectReason || 'No reason was given.')}<div class="text-secondary">Improve the course, then switch Make public on again.</div></div>`
+  : c.status === 'PENDING' ? '<div class="small text-secondary mt-2">An admin is reviewing this course. Switch off to withdraw the request.</div>'
+  : c.status === 'PUBLISHED' ? '<div class="small text-secondary mt-2">Listed with the other courses. Only an admin can edit it now.</div>' : '';
+/* input = the switch that was clicked; returns the updated course, or null when cancelled or refused (the switch is put back) */
+async function changeVisibility(input) {
+  const makePublic = input.checked, id = input.dataset.vis, title = input.dataset.title;
+  const ok = makePublic
+    ? await confirmBox('Ask an admin to make "' + title + '" public? If it is approved it is listed with the other courses and anyone can join it for free. If not, you get a message with the reason.', { title: 'Make course public', confirmText: 'Send request', danger: false })
+    : await confirmBox(input.dataset.status === 'PENDING' ? 'Withdraw your request? The course stays private.' : 'Make "' + title + '" private again? It leaves the course list. This only works while nobody else is enrolled.', { title: 'Make course private', confirmText: 'Make private', danger: false });
+  if (!ok) { input.checked = !makePublic; return null; }
+  try {
+    const c = await api('/personal/courses/' + id + (makePublic ? '/publish' : '/unpublish'), 'POST');
+    toast(makePublic ? 'Request sent. An admin will review your course.' : 'Course is private again', makePublic ? 'success' : 'info');
+    return c;
+  } catch (e) { input.checked = !makePublic; toast(e.message || 'Could not change visibility', 'danger'); return null; }
 }
 
 /* ===== shared course card (course = GET /courses item) ===== */
@@ -848,7 +317,6 @@ function card(c, mine) {
   document.head.insertAdjacentHTML('beforeend', '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>' + UI_CSS + CERT_CSS + '</style><link href="css/fx.css" rel="stylesheet">');
   const pill = '';
   const avatar = u?.avatar || '';
-  const modeLabel = CONFIG.USE_MOCK ? 'Mock data' : 'Live API';
   document.body.insertAdjacentHTML('afterbegin', `<div class="bg"><i></i><i></i><i></i><i></i></div>
   <nav class="navbar navbar-expand-lg sticky-top glass ${role === 'ADMIN' ? 'admin-nav' : ''}"><div class="container">
    <a class="navbar-brand fw-bold" href="index.html"><b class="brand-mark"><i class="bi bi-mortarboard-fill"></i></b><span class="brand-word">Skill<span>Trail</span></span></a>
@@ -860,6 +328,7 @@ function card(c, mine) {
     <li class="nav-item"><a class="nav-link${on('about.html')}" href="about.html">About</a></li>
     <li class="nav-item"><a class="nav-link${on('contact.html')}" href="contact.html">Contact</a></li>
     ${u ? `<li class="nav-item"><a class="nav-link${on('my-courses.html')}" href="my-courses.html">My Courses</a></li>` : ''}
+    ${role === 'STUDENT' ? `<li class="nav-item"><a class="nav-link${on('personal-courses.html') || on('personal-course.html')}" href="personal-courses.html"><i class="bi bi-journal-plus"></i> Personal</a></li>` : ''}
     ${role === 'ADMIN' ? `<li class="nav-item"><a class="nav-link${on('admin.html')}" href="admin.html"><i class="bi bi-shield-lock"></i> Admin</a></li>` : ''}
 
    </ul>
@@ -867,10 +336,8 @@ function card(c, mine) {
       <div class="dropdown-menu dropdown-menu-end p-0 glass" id="bellList" style="width:320px;max-height:380px;overflow:auto"><div class="notif text-secondary">No notifications</div></div></div>
      <a href="profile.html" class="user-chip text-reset text-decoration-none me-2${on('profile.html')}">${avatar ? `<img class="nav-avatar" src="${avatar}" alt="Profile">` : `<span class="nav-avatar nav-avatar-fallback">${esc((u.fullName || 'U').split(' ').map(x => x[0]).slice(0, 2).join(''))}</span>`}<span>Hi, ${esc(u.fullName)}</span></a><button class="btn btn-outline-light btn-sm" onclick="logout()">Logout</button>`
       : `<span class="badge rounded-pill text-bg-secondary me-2" title="You are browsing as a guest. Log in to enroll, buy and review courses.">Guest</span><a href="login.html" class="btn btn-outline-light btn-sm me-2">Login</a><a href="signup.html" class="btn btn-primary btn-sm">Sign up</a>`}
-   <button class="btn btn-sm theme-toggle ms-lg-2" id="themeToggle" type="button"></button>
-   <button class="btn btn-sm mode-toggle ms-lg-2" id="modeToggle" type="button" title="Switch data source"><i class="bi bi-database"></i> ${modeLabel}</button></div></div></nav>`);
+   <button class="btn btn-sm theme-toggle ms-lg-2" id="themeToggle" type="button"></button></div></div></nav>`);
   const themeButton = document.getElementById('themeToggle'); if (themeButton) { themeButton.addEventListener('click', toggleTheme); paintThemeToggle(); }
-  const modeButton = document.getElementById('modeToggle'); if (modeButton) modeButton.addEventListener('click', () => { const next = CONFIG.USE_MOCK ? 'live' : 'mock'; localStorage.setItem('skilltrail-mode', next); toast(next === 'live' ? 'Live API mode enabled' : 'Mock data mode enabled'); setTimeout(() => location.reload(), 250); });
   document.body.insertAdjacentHTML('beforeend', `<footer class="footer2 glass mt-auto"><div class="container"><div class="row g-4">
     <div class="col-lg-4"><a class="navbar-brand fw-bold mb-3" href="index.html"><b class="brand-mark"><i class="bi bi-mortarboard-fill"></i></b><span class="brand-word">Skill<span>Trail</span></span></a>
      <p class="text-secondary mb-3" style="max-width:330px">Expert-led online courses you can take anytime, on any device. Track your progress, pass quizzes and earn certificates.</p>
@@ -878,7 +345,7 @@ function card(c, mine) {
     <div class="col-6 col-lg-2"><h6>Explore</h6><div class="fl"><a href="index.html">Home</a><a href="courses.html">Courses</a><a href="my-courses.html">My courses</a><a href="about.html">About us</a></div></div>
     <div class="col-6 col-lg-3"><h6>Support</h6><div class="fl"><a href="support.html#help">Help &amp; FAQ</a><a href="support.html#support">Send a request</a><a href="contact.html">Contact</a><a href="login.html">Login</a></div></div>
     <div class="col-lg-3"><h6>Get in touch</h6><div class="fl"><a href="contact.html"><i class="bi bi-geo-alt me-2"></i>FPT University, Hoa Lac, Hanoi</a><a href="mailto:support@skilltrail.com"><i class="bi bi-envelope me-2"></i>support@skilltrail.com</a><a href="contact.html"><i class="bi bi-clock me-2"></i>Mon - Fri, 8:00 - 17:00</a></div></div>
-   </div><div class="bottom d-flex justify-content-between flex-wrap gap-2"><small class="text-secondary">&copy; 2026 SkillTrail. All rights reserved.</small><small class="text-secondary">Made with <i class="bi bi-heart-fill" style="color:#ff5fa2"></i> in Hanoi</small></div></div></footer>
+   </div><div class="bottom d-flex justify-content-between flex-wrap gap-2"><small class="text-secondary">&copy; 2026 SkillTrail. All rights reserved.</small></div></div></footer>
    <button id="toTop" class="btn btn-primary rounded-circle" aria-label="Scroll to top"><i class="bi bi-arrow-up"></i></button>
    <div id="toasts" class="toast-container position-fixed top-0 end-0 p-3"></div>
    <div class="modal fade" id="confirmModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered modal-sm"><div class="modal-content text-center p-3">

@@ -80,7 +80,8 @@
     <div class="row g-3 mb-4" id="stats"></div>
 
     <ul class="nav nav-pills admin-tabs mb-3" id="tabs">
-      <li class="nav-item"><button class="nav-link active" data-tab="courses"><i class="bi bi-journal-richtext"></i> Courses</button></li>
+      <li class="nav-item"><button class="nav-link active" data-tab="courses"><i class="bi bi-journal-richtext"></i> Courses <span class="badge bg-danger d-none" id="pendBadge" title="Courses waiting for approval"></span></button></li>
+      <li class="nav-item"><button class="nav-link" data-tab="users"><i class="bi bi-people"></i> Users</button></li>
       <li class="nav-item"><button class="nav-link" data-tab="account"><i class="bi bi-person-lock"></i> Account logs</button></li>
       <li class="nav-item"><button class="nav-link" data-tab="payment"><i class="bi bi-credit-card"></i> Payment logs</button></li>
       <li class="nav-item"><button class="nav-link" data-tab="enrollment"><i class="bi bi-person-plus"></i> Enrollment logs</button></li>
@@ -117,6 +118,38 @@
             </tr>
           </thead>
           <tbody id="cBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Users -->
+    <section id="pane-users" class="glass p-3 p-md-4 d-none">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <h2 class="h5 mb-0 me-2">Users</h2>
+        <input id="uSearch" class="form-control" style="max-width:260px" placeholder="Search name or email">
+        <select id="uFilter" class="form-select" style="max-width:170px">
+          <option value="">All accounts</option>
+          <option value="ADMIN">Admins</option>
+          <option value="STUDENT">Students</option>
+          <option value="BANNED">Banned</option>
+        </select>
+        <span class="text-secondary small" id="uCount"></span>
+        <button class="btn btn-outline-light ms-auto" id="uRefresh"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <p class="small text-secondary">Banned accounts cannot log in and are signed out right away. The original admin cannot be demoted or banned, and only the original admin can demote or ban other admins.</p>
+      <div class="table-responsive log-scroll">
+        <table class="table admin-table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Enrolled</th>
+              <th>Joined</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="uBody"></tbody>
         </table>
       </div>
     </section>
@@ -216,7 +249,7 @@
               </select>
             </div>
             <div class="col-12 d-none" id="rejectBox">
-              <label class="form-label">Reject reason</label>
+              <label class="form-label">Reject reason <small class="text-secondary">(the course owner receives it as a notification)</small></label>
               <input name="rejectReason" class="form-control" maxlength="500">
             </div>
             <div class="col-12">
@@ -334,9 +367,9 @@
       let courses = [], cats = [], staff = [], editing = null, curId = null, tab = 'courses', logRows = [];
 
       /* ---------- log definitions: row() returns plain strings (also used for CSV); badge = index of the action column ---------- */
-      const BADGE = { REGISTERED: 'primary', LOGIN: 'success', LOGIN_FAILED: 'danger', LOGIN_BLOCKED: 'warning text-dark', PASSWORD_CHANGED: 'info text-dark', ROLE_CHANGED: 'info text-dark', LOCKED: 'danger', UNLOCKED: 'success', ENROLLED: 'success', UNENROLLED: 'secondary', COMPLETED: 'success', PAID: 'success' };
+      const BADGE = { REGISTERED: 'primary', LOGIN: 'success', LOGIN_FAILED: 'danger', LOGIN_BLOCKED: 'warning text-dark', PASSWORD_CHANGED: 'info text-dark', ROLE_CHANGED: 'info text-dark', LOCKED: 'danger', UNLOCKED: 'success', BANNED: 'danger', UNBANNED: 'success', ENROLLED: 'success', UNENROLLED: 'secondary', COMPLETED: 'success', PAID: 'success' };
       const LOGS = {
-        account: { title: 'Account logs', head: ['Time', 'Action', 'User', 'Email', 'Detail', 'By'], badge: 1, row: l => [fmt(l.createdAt), l.action, l.userName, l.email, l.detail, l.actor] },
+        account: { title: 'Account logs', head: ['Time', 'Action', 'User', 'Email', 'Detail', 'By'], badge: 1, row: l => [fmt(l.createdAt), { LOCKED: 'BANNED', UNLOCKED: 'UNBANNED' }[l.action] || l.action, l.userName, l.email, l.detail, l.actor] },
         payment: { title: 'Payment logs', head: ['Time', 'User', 'Email', 'Course', 'Amount', 'Method'], badge: -1, row: l => [fmt(l.createdAt), l.userName, l.email, l.courseTitle, money(l.amount), l.method] },
         enrollment: { title: 'Enrollment logs', head: ['Time', 'Action', 'User', 'Email', 'Course'], badge: 1, row: l => [fmt(l.createdAt), l.action, l.userName, l.email, l.courseTitle] },
         completion: { title: 'Completion logs', head: ['Time', 'User', 'Email', 'Course', 'Result'], badge: -1, row: l => [fmt(l.createdAt), l.userName, l.email, l.courseTitle, l.detail || 'Completed'] }
@@ -346,6 +379,7 @@
       async function loadStats() {
         const s = await api('/admin/stats');
         const items = [ ['Users', s.users, 'people'], ['Courses', s.courses, 'journal-richtext'], ['Published', s.published, 'broadcast'], ['Pending', s.pending, 'hourglass-split'], ['Enrollments', s.enrollments, 'person-plus'], ['Reviews', s.reviews, 'star'], ['Open tickets', s.openTickets, 'life-preserver']];
+        const pb = $('#pendBadge'); pb.textContent = s.pending; pb.classList.toggle('d-none', !s.pending);
         const tb = $('#tkBadge'); tb.textContent = s.openTickets; tb.classList.toggle('d-none', !s.openTickets);
         $('#stats').innerHTML = items.map(([k, v, i]) => `<div class="col-6 col-md-4 col-xl"><div class="admin-stat glass"><i class="bi bi-${i} text-secondary"></i><b>${v}</b><small>${k}</small></div></div>`).join('');
       }
@@ -356,13 +390,14 @@
         staff = staff.filter(u => u.role === 'ADMIN' || u.author); // who can be shown as a course's instructor: admins and course authors
         renderCourses();
       }
+      const studentMade = c => !staff.some(u => u.userId === c.instructor.userId); // a student asked to make their personal course public
       function renderCourses() {
         const q = $('#cSearch').value.trim().toLowerCase(), st = $('#cStatus').value;
         const list = courses.filter(c => (!st || c.status === st) && (!q || (c.title + ' ' + c.instructor.fullName).toLowerCase().includes(q)));
         $('#cCount').textContent = list.length + ' of ' + courses.length + ' courses';
         $('#cBody').innerHTML = list.length ? list.map(c => `<tr>
           <td>${imgTag(c, 'admin-thumb')}</td>
-          <td><a class="text-reset fw-semibold" href="course.html?id=${c.courseId}">${esc(c.title)}</a><div class="small text-secondary">${esc(c.level)} · ${c.lessonCount} lessons</div></td>
+          <td><a class="text-reset fw-semibold" href="course.html?id=${c.courseId}">${esc(c.title)}</a>${c.status === 'PENDING' && studentMade(c) ? ' <span class="badge bg-info text-dark">Student request</span>' : ''}<div class="small text-secondary">${esc(c.level)} · ${c.lessonCount} lessons</div></td>
           <td>${esc(c.category)}</td>
           <td>${esc(c.instructor.fullName)}</td>
           <td class="text-nowrap">${money(c.price)}</td>
@@ -385,7 +420,8 @@
         editing = c || null;
         $('#cmTitle').textContent = c ? 'Edit course' : 'Add course';
         form.categoryId.innerHTML = cats.map(k => `<option value="${k.categoryId}">${esc(k.name)}</option>`).join('');
-        form.instructorId.innerHTML = staff.map(u => `<option value="${u.userId}">${esc(u.fullName)} (${u.role === 'ADMIN' ? 'admin' : 'instructor'})</option>`).join('');
+        form.instructorId.innerHTML = staff.map(u => `<option value="${u.userId}">${esc(u.fullName)} (${u.role === 'ADMIN' ? 'admin' : 'instructor'})</option>`).join('')
+          + (c && studentMade(c) ? `<option value="${c.instructor.userId}">${esc(c.instructor.fullName)} (student)</option>` : '');
         form.title.value = c?.title || ''; form.categoryId.value = c?.categoryId ?? cats[0]?.categoryId; form.level.value = c?.level || 'Beginner'; form.price.value = c?.price ?? 0;
         form.instructorId.value = c?.instructor.userId ?? state.user.userId; form.status.value = status || c?.status || 'PUBLISHED';
         form.rejectReason.value = c?.rejectReason || ''; form.imageUrl.value = c?.imageUrl || ''; form.description.value = c?.description || '';
@@ -560,12 +596,61 @@
       $('#tkResolve').onclick = () => saveTicket('RESOLVED', false);
       $('#tkReopen').onclick = () => saveTicket('OPEN', false);
 
+      /* ---------- users ---------- */
+      let users = [];
+      const me = () => users.find(u => u.userId === state.user.userId), iAmOwner = () => !!me()?.owner;
+      async function loadUsers() {
+        try { users = (await api('/admin/users')).filter(u => !u.author); } catch (x) { users = []; toast(x.message || 'Could not load users', 'danger'); }
+        renderUsers();
+      }
+      function userActions(u) {
+        if (u.userId === state.user.userId) return '<span class="small text-secondary">You</span>';
+        if (u.owner) return '<span class="small text-secondary"><i class="bi bi-shield-lock-fill"></i> Protected</span>';
+        const admin = u.role === 'ADMIN', canTouchAdmin = iAmOwner();
+        const ban = admin && !canTouchAdmin ? '' : `<button class="btn btn-sm ${u.locked ? 'btn-outline-success' : 'btn-outline-danger'}" data-uact="${u.locked ? 'unban' : 'ban'}" data-id="${u.userId}"><i class="bi bi-${u.locked ? 'unlock' : 'slash-circle'}"></i> ${u.locked ? 'Unban' : 'Ban'}</button>`;
+        const role = admin ? (canTouchAdmin ? `<button class="btn btn-sm btn-outline-warning" data-uact="demote" data-id="${u.userId}"><i class="bi bi-person-dash"></i> Remove admin</button>` : '')
+          : (u.locked ? '' : `<button class="btn btn-sm btn-outline-info" data-uact="promote" data-id="${u.userId}"><i class="bi bi-person-up"></i> Make admin</button>`);
+        return ban + ' ' + role;
+      }
+      function renderUsers() {
+        const q = $('#uSearch').value.trim().toLowerCase(), f = $('#uFilter').value;
+        const list = users.filter(u => (!f || (f === 'BANNED' ? u.locked : u.role === f)) && (!q || (u.fullName + ' ' + u.email).toLowerCase().includes(q)));
+        $('#uCount').textContent = list.length + ' of ' + users.length + ' accounts';
+        $('#uBody').innerHTML = list.length ? list.map(u => `<tr>
+          <td><b>${esc(u.fullName)}</b>${u.userId === state.user.userId ? ' <span class="badge bg-secondary">you</span>' : ''}<div class="small text-secondary">${esc(u.email)}</div></td>
+          <td>${u.role === 'ADMIN' ? '<span class="badge bg-warning text-dark">Admin</span>' : '<span class="badge bg-secondary">Student</span>'}${u.owner ? ' <span class="badge bg-info text-dark" title="Cannot be demoted or banned">Original admin</span>' : ''}</td>
+          <td>${u.locked ? '<span class="badge bg-danger">Banned</span>' : '<span class="badge bg-success">Active</span>'}</td>
+          <td>${u.enrollments}</td>
+          <td class="text-nowrap">${u.createdAt ? fmt(u.createdAt) : '<span class="text-secondary">—</span>'}</td>
+          <td class="text-end text-nowrap">${userActions(u)}</td></tr>`).join('') : '<tr><td colspan="6" class="text-center text-secondary py-4">No accounts match.</td></tr>';
+      }
+      $('#uSearch').oninput = $('#uFilter').onchange = renderUsers;
+      $('#uRefresh').onclick = loadUsers;
+      $('#uBody').addEventListener('click', async e => {
+        const b = e.target.closest('[data-uact]'); if (!b) return;
+        const act = b.dataset.uact, u = users.find(x => x.userId === +b.dataset.id);
+        const text = {
+          ban: ['Ban ' + u.fullName + '? They are signed out right away and cannot log in until you unban them.', 'Ban account', 'Ban'],
+          unban: ['Unban ' + u.fullName + '? They can log in again.', 'Unban account', 'Unban'],
+          promote: ['Make ' + u.fullName + ' an admin? They get full access to the admin console.', 'Make admin', 'Make admin'],
+          demote: ['Remove admin rights from ' + u.fullName + '? They become a normal student.', 'Remove admin', 'Remove admin']
+        }[act];
+        if (!await confirmBox(text[0], { title: text[1], confirmText: text[2], danger: act === 'ban' || act === 'demote' })) return;
+        try {
+          if (act === 'ban' || act === 'unban') await api('/admin/users/' + u.userId + '/lock', 'PUT', { locked: act === 'ban' });
+          else await api('/admin/users/' + u.userId + '/role', 'PUT', { role: act === 'promote' ? 'ADMIN' : 'STUDENT' });
+          toast({ ban: 'Account banned', unban: 'Account unbanned', promote: u.fullName + ' is now an admin', demote: u.fullName + ' is now a student' }[act]);
+          await Promise.all([loadUsers(), loadStats()]);
+        } catch (x) { toast(x.message || 'Action failed', 'danger'); }
+      });
+
       /* ---------- tabs ---------- */
       $('#tabs').addEventListener('click', e => {
         const b = e.target.closest('[data-tab]'); if (!b) return;
         tab = b.dataset.tab; $$('#tabs .nav-link').forEach(x => x.classList.toggle('active', x === b));
-        $('#pane-courses').classList.toggle('d-none', tab !== 'courses'); $('#pane-support').classList.toggle('d-none', tab !== 'support'); $('#pane-logs').classList.toggle('d-none', tab === 'courses' || tab === 'support');
-        if (tab === 'courses') loadCourses(); else if (tab === 'support') loadTickets(); else loadLogs();
+        $('#pane-courses').classList.toggle('d-none', tab !== 'courses'); $('#pane-support').classList.toggle('d-none', tab !== 'support'); $('#pane-users').classList.toggle('d-none', tab !== 'users');
+        $('#pane-logs').classList.toggle('d-none', ['courses', 'support', 'users'].includes(tab));
+        if (tab === 'courses') loadCourses(); else if (tab === 'support') loadTickets(); else if (tab === 'users') loadUsers(); else loadLogs();
       });
 
       try { await Promise.all([loadStats(), loadCourses()]); } catch (x) { toast(x.message || 'Could not load the admin data', 'danger'); }

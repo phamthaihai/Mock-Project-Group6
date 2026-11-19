@@ -21,13 +21,11 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="js/seed-content.js"></script>
-  <script src="js/config.js"></script>
   <script src="js/common.js"></script>
   <script>
     /* learn.html?id=<courseId>&k=<section>.<lesson>   (k is optional: resumes at the first unfinished lesson) */
-    if (guard()) (async () => {
-      const id = new URLSearchParams(location.search).get('id'), admin = state.user.role === 'ADMIN';
+    (async () => {
+      const id = new URLSearchParams(location.search).get('id'), admin = state.user?.role === 'ADMIN';
       let c, curr, done = new Set(), quizzes = {}, enrolled = false, seq = [], k;
       const tracked = () => enrolled;
       const lessonKeys = () => seq.filter(x => x.t === 'l').map(x => x.k);
@@ -103,7 +101,7 @@
           <div class="fw-semibold">${esc(c.title)}</div></div>
         <div class="d-flex align-items-center gap-3" style="min-width:240px"><div class="progress flex-grow-1" style="height:8px"><div class="progress-bar" style="width:${pct()}%"></div></div><small class="text-secondary text-nowrap">${pct()}% complete</small></div>
       </div>
-      ${admin && !enrolled ? '<div class="alert alert-info py-2 small"><i class="bi bi-shield-check"></i> Admin preview: progress is not tracked.</div>' : ''}
+      ${admin && !enrolled ? '<div class="alert alert-info py-2 small"><i class="bi bi-shield-check"></i> Admin preview: progress is not tracked.</div>' : (!enrolled && !admin ? '<div class="alert alert-info py-2 small"><i class="bi bi-info-circle"></i> Free course: progress is not saved. <a href="' + (state.user ? 'course.html?id=' + id : 'login.html?next=' + encodeURIComponent('course.html?id=' + id)) + '">' + (state.user ? 'Enroll' : 'Log in') + '</a> to track it.</div>' : '')}
       <div class="learn-wrap">
         <aside class="learn-side glass">${side(cur)}</aside>
         <section>
@@ -166,7 +164,11 @@
       try {
         c = await api('/courses/' + id);
         const p = await api('/courses/' + id + '/progress'); enrolled = p.enrolled; quizzes = p.quizzes || {};
-        if (!enrolled && !admin) { flash('Enroll in this course to start learning', 'info'); return location.href = 'course.html?id=' + id; }
+        const free = c.status === 'PUBLISHED' && c.price === 0; // anyone, guests included, can study a free course (progress is saved only when enrolled)
+        if (!enrolled && !admin && !free) {
+          if (!state.user) { flash('Please log in to open paid courses', 'warning'); return location.href = 'login.html?next=' + encodeURIComponent('learn.html' + location.search); }
+          flash('Enroll in this course to start learning', 'info'); return location.href = 'course.html?id=' + id;
+        }
         curr = curriculumOf(c); buildSeq(); done = keysOf(p.completed);
         if (!seq.some(x => x.t === 'l')) { $('#page').innerHTML = '<p class="text-center p-5 mb-0">This course has no lessons yet.</p>'; return; }
         k = new URLSearchParams(location.search).get('k');
