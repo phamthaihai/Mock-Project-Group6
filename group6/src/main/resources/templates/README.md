@@ -15,5 +15,5 @@
 
 
 ## Admin Account:
-- Email: Admin@gmail.com
+- Email: admin@gmail.com
 - Password: 123456
